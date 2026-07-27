@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, ImageOverlay, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { ndviAt, ndviColor } from "@/lib/ndvi";
+import proj4 from "proj4";
+import { toast } from "sonner";
+import { ndviAt, ndviColor, classify } from "@/lib/ndvi";
+import NDVIGeoTIFFLayer from "./NDVIGeoTIFFLayer";
+import { useGeoTIFFStore } from "@/stores/geotiff-store";
 
 export type LayerState = {
   ndvi: { visible: boolean; opacity: number };
@@ -58,24 +62,125 @@ function CoordDisplay({ onMove }: { onMove: (lat: number, lng: number, zoom: num
   return null;
 }
 
+function MapResizer({ bottomPaneExpanded }: { bottomPaneExpanded?: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    const t1 = setTimeout(() => map.invalidateSize(), 150);
+    const t2 = setTimeout(() => map.invalidateSize(), 350);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [map, bottomPaneExpanded]);
+  return null;
+}
+
 function ClickHandler({
   onClick,
+  onOutsideClick,
   measureActive,
   onMeasureClick,
+  aoiActive,
+  onAOIClick,
 }: {
   onClick: (lat: number, lng: number) => void;
+  onOutsideClick?: () => void;
   measureActive?: boolean;
   onMeasureClick?: (lat: number, lng: number) => void;
+  aoiActive?: boolean;
+  onAOIClick?: (lat: number, lng: number) => void;
 }) {
+  const { raster, setSelectedPixel } = useGeoTIFFStore();
+
   useMapEvents({
     click: (e) => {
+      const { lat, lng } = e.latlng;
+
       if (measureActive && onMeasureClick) {
-        onMeasureClick(e.latlng.lat, e.latlng.lng);
-      } else {
-        onClick(e.latlng.lat, e.latlng.lng);
+        onMeasureClick(lat, lng);
+        return;
       }
+
+      if (aoiActive && onAOIClick) {
+        onAOIClick(lat, lng);
+        return;
+      }
+
+      if (!raster) {
+        if (onOutsideClick) onOutsideClick();
+        return;
+      }
+
+      const { geoBounds, affine, width, height, values, noDataValue } = raster;
+      const inside =
+        lng >= geoBounds.west &&
+        lng <= geoBounds.east &&
+        lat >= geoBounds.south &&
+        lat <= geoBounds.north;
+
+      if (!inside) {
+        setSelectedPixel(null);
+        if (onOutsideClick) onOutsideClick();
+        toast.info("Click inside the uploaded NDVI raster to inspect pixel values.");
+        return;
+      }
+
+      let projX = lng;
+      let projY = lat;
+
+      if (affine.crs !== "EPSG:4326") {
+        try {
+          const res = proj4("EPSG:4326", affine.crs, [lng, lat]);
+          projX = res[0];
+          projY = res[1];
+        } catch (err) {
+          console.error("Proj4 coordinate conversion failed:", err);
+        }
+      }
+
+      const col = Math.floor((projX - affine.originX) / affine.pixelWidth);
+      const row = Math.floor((affine.originY - projY) / affine.pixelHeight);
+
+      if (col < 0 || col >= width || row < 0 || row >= height) {
+        setSelectedPixel(null);
+        if (onOutsideClick) onOutsideClick();
+        toast.info("Click inside the uploaded NDVI raster to inspect pixel values.");
+        return;
+      }
+
+      const idx = row * width + col;
+      const val = values[idx];
+
+      const isNoData =
+        val === undefined ||
+        isNaN(val) ||
+        !isFinite(val) ||
+        (noDataValue !== null && Math.abs(val - noDataValue) < 1e-4) ||
+        Math.abs(val - -9999) < 1e-4 ||
+        val < -1.0 ||
+        val > 1.0;
+
+      if (isNoData) {
+        setSelectedPixel(null);
+        if (onOutsideClick) onOutsideClick();
+        toast.info("Selected location contains no-data in the uploaded raster.");
+        return;
+      }
+
+      setSelectedPixel({
+        lat,
+        lng,
+        row,
+        col,
+        value: Number(val.toFixed(3)),
+        vegClass: classify(val),
+        isNoData: false,
+      });
+
+      onClick(lat, lng);
     },
   });
+
   return null;
 }
 
@@ -100,7 +205,7 @@ function ClickedMarker({ lat, lng }: { lat: number; lng: number }) {
   return null;
 }
 
-function MeasureOverlay({ points, onClear }: { points: L.LatLngTuple[]; onClear: () => void }) {
+function MeasureOverlay({ points }: { points: L.LatLngTuple[] }) {
   const map = useMap();
   useEffect(() => {
     if (points.length < 1) return;
@@ -110,7 +215,7 @@ function MeasureOverlay({ points, onClear }: { points: L.LatLngTuple[]; onClear:
       dashArray: "6, 6",
     }).addTo(map);
 
-    const markers: L.Marker[] = points.map((p, i) => {
+    const markers: L.Marker[] = points.map((p) => {
       const icon = L.divIcon({
         className: "",
         html: `<div style="background:#38bdf8;width:10px;height:10px;border-radius:50%;border:2px solid white;"></div>`,
@@ -129,26 +234,70 @@ function MeasureOverlay({ points, onClear }: { points: L.LatLngTuple[]; onClear:
   return null;
 }
 
+function AOIPolygonOverlay({ points }: { points: L.LatLngTuple[] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (points.length < 1) return;
+    const polygon = L.polygon(points, {
+      color: "#10b981",
+      fillColor: "#10b981",
+      fillOpacity: 0.25,
+      weight: 2.5,
+      dashArray: "4, 4",
+    }).addTo(map);
+
+    const markers: L.Marker[] = points.map((p) => {
+      const icon = L.divIcon({
+        className: "",
+        html: `<div style="background:#10b981;width:10px;height:10px;border-radius:50%;border:2px solid white;"></div>`,
+        iconSize: [10, 10],
+        iconAnchor: [5, 5],
+      });
+      return L.marker(p, { icon }).addTo(map);
+    });
+
+    return () => {
+      polygon.remove();
+      markers.forEach((m) => m.remove());
+    };
+  }, [map, points]);
+
+  return null;
+}
+
 export default function GISMap({
   layers,
   year,
   clicked,
   onClick,
+  onOutsideClick,
   onCursor,
   measureActive,
   swipeActive,
+  aoiActive,
+  onAOIFinished,
+  bottomPaneExpanded,
 }: {
   layers: LayerState;
   year: number;
   clicked: { lat: number; lng: number } | null;
   onClick: (lat: number, lng: number) => void;
+  onOutsideClick?: () => void;
   onCursor: (lat: number, lng: number, zoom: number) => void;
   measureActive?: boolean;
   swipeActive?: boolean;
+  aoiActive?: boolean;
+  onAOIFinished?: (points: [number, number][]) => void;
+  bottomPaneExpanded?: boolean;
 }) {
   const [ndviUrl, setNdviUrl] = useState<string | null>(null);
   const rafRef = useRef<number | null>(null);
   const [measurePoints, setMeasurePoints] = useState<L.LatLngTuple[]>([]);
+  const [aoiPoints, setAoiPoints] = useState<L.LatLngTuple[]>([]);
+  const [swipePos, setSwipePos] = useState(50);
+  const isDraggingSwipe = useRef(false);
+
+  const { raster, opacity: geoOpacity, visible: geoVisible } = useGeoTIFFStore();
 
   useEffect(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -158,13 +307,25 @@ export default function GISMap({
   }, [year]);
 
   useEffect(() => {
-    if (!measureActive) {
-      setMeasurePoints([]);
-    }
+    if (!measureActive) setMeasurePoints([]);
   }, [measureActive]);
+
+  useEffect(() => {
+    if (!aoiActive) setAoiPoints([]);
+  }, [aoiActive]);
 
   const handleMeasureClick = (lat: number, lng: number) => {
     setMeasurePoints((prev) => [...prev, [lat, lng]]);
+  };
+
+  const handleAOIClick = (lat: number, lng: number) => {
+    setAoiPoints((prev) => {
+      const next = [...prev, [lat, lng] as L.LatLngTuple];
+      if (next.length >= 3 && onAOIFinished) {
+        onAOIFinished(next as [number, number][]);
+      }
+      return next;
+    });
   };
 
   const measureDistanceKm = useMemo(() => {
@@ -191,15 +352,26 @@ export default function GISMap({
   );
 
   return (
-    <div className="relative h-full w-full">
+    <div
+      className="relative h-full w-full select-none"
+      onMouseMove={(e) => {
+        if (!isDraggingSwipe.current) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        setSwipePos((x / rect.width) * 100);
+      }}
+      onMouseUp={() => (isDraggingSwipe.current = false)}
+    >
       <MapContainer
         bounds={INDIA_BOUNDS}
         className="h-full w-full"
         zoomControl={false}
         minZoom={4}
-        maxZoom={12}
+        maxZoom={14}
         worldCopyJump={false}
       >
+        <MapResizer bottomPaneExpanded={bottomPaneExpanded} />
+
         {layers.rgb.visible && (
           <TileLayer
             attribution='&copy; OpenStreetMap contributors'
@@ -208,12 +380,20 @@ export default function GISMap({
           />
         )}
 
-        {ndviUrl && layers.ndvi.visible && (
+        {ndviUrl && layers.ndvi.visible && !raster && (
           <ImageOverlay
             url={ndviUrl}
             bounds={INDIA_BOUNDS}
             opacity={layers.ndvi.opacity}
             zIndex={400}
+          />
+        )}
+
+        {raster && (
+          <NDVIGeoTIFFLayer
+            raster={raster}
+            opacity={geoOpacity}
+            visible={geoVisible}
           />
         )}
 
@@ -227,25 +407,38 @@ export default function GISMap({
           />
         )}
 
-        {layers.states.visible && (
-          <StateGrid opacity={layers.states.opacity} />
-        )}
-
-        {layers.districts.visible && (
-          <DistrictGrid opacity={layers.districts.opacity} />
-        )}
+        {layers.states.visible && <StateGrid opacity={layers.states.opacity} />}
+        {layers.districts.visible && <DistrictGrid opacity={layers.districts.opacity} />}
 
         <ZoomCtl />
         <CoordDisplay onMove={onCursor} />
         <ClickHandler
           onClick={onClick}
+          onOutsideClick={onOutsideClick}
           measureActive={measureActive}
           onMeasureClick={handleMeasureClick}
+          aoiActive={aoiActive}
+          onAOIClick={handleAOIClick}
         />
-        {clicked && !measureActive && <ClickedMarker lat={clicked.lat} lng={clicked.lng} />}
-        {measureActive && <MeasureOverlay points={measurePoints} onClear={() => setMeasurePoints([])} />}
+        {clicked && raster && !measureActive && !aoiActive && <ClickedMarker lat={clicked.lat} lng={clicked.lng} />}
+        {measureActive && <MeasureOverlay points={measurePoints} />}
+        {aoiActive && <AOIPolygonOverlay points={aoiPoints} />}
       </MapContainer>
 
+      {/* Interactive Swipe Curtain Handle Overlay */}
+      {swipeActive && (
+        <div
+          className="absolute top-0 bottom-0 z-[500] w-1 bg-emerald-400 cursor-ew-resize flex items-center justify-center shadow-[0_0_15px_oklch(0.78_0.17_168)]"
+          style={{ left: `${swipePos}%` }}
+          onMouseDown={() => (isDraggingSwipe.current = true)}
+        >
+          <div className="h-9 w-9 rounded-full bg-emerald-500 text-black border-2 border-white shadow-2xl grid place-items-center font-bold text-xs font-mono select-none">
+            ↔
+          </div>
+        </div>
+      )}
+
+      {/* Measure Tool Badge */}
       {measureActive && (
         <div className="absolute top-4 left-20 z-[600] rounded-xl border border-primary/40 bg-[var(--surface-0)]/90 px-4 py-2 font-mono text-xs shadow-xl backdrop-blur flex items-center gap-3">
           <div>
@@ -267,10 +460,25 @@ export default function GISMap({
         </div>
       )}
 
-      {swipeActive && (
-        <div className="absolute top-4 right-20 z-[600] rounded-xl border border-amber-500/40 bg-[var(--surface-0)]/90 px-4 py-2 font-mono text-xs shadow-xl backdrop-blur flex items-center gap-2 text-amber-400">
-          <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping" />
-          <span>Swipe Compare Mode (2025 vs 2026) Active</span>
+      {/* AOI Drawing Tool Badge */}
+      {aoiActive && (
+        <div className="absolute top-4 left-20 z-[600] rounded-xl border border-emerald-500/40 bg-[var(--surface-0)]/90 px-4 py-2 font-mono text-xs shadow-xl backdrop-blur flex items-center gap-3 text-emerald-400">
+          <div>
+            <div className="text-[10px] uppercase text-emerald-300">AOI Polygon Tool Active</div>
+            <div className="text-xs font-bold">
+              {aoiPoints.length < 3
+                ? `Click ${3 - aoiPoints.length} more point(s) to enclose AOI field`
+                : `${aoiPoints.length} polygon vertices added`}
+            </div>
+          </div>
+          {aoiPoints.length > 0 && (
+            <button
+              onClick={() => setAoiPoints([])}
+              className="rounded bg-emerald-500/20 px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/30"
+            >
+              Reset Points
+            </button>
+          )}
         </div>
       )}
     </div>

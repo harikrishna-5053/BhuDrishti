@@ -1,26 +1,8 @@
-import { useMemo } from "react";
-import { X } from "lucide-react";
-
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-
-import {
-  classify,
-  localStats,
-  ndviAt,
-  ndviColor,
-  type VegClass,
-} from "@/lib/ndvi";
-
+import { X, Layers, AlertCircle } from "lucide-react";
+import { ndviColor, type VegClass } from "@/lib/ndvi";
 import { formatCoord } from "@/lib/geo-format";
+import { useGeoTIFFStore } from "@/stores/geotiff-store";
+import Histogram from "./Histogram";
 
 type NDVIStatsProps = {
   lat: number;
@@ -32,30 +14,31 @@ type NDVIStatsProps = {
 export default function NDVIStats({
   lat,
   lng,
-  year,
   onClose,
 }: NDVIStatsProps) {
-  const ndvi = ndviAt(lat, lng, year);
-  const cls = classify(ndvi);
+  const { raster, selectedPixel } = useGeoTIFFStore();
 
-  const stats = useMemo(
-    () => localStats(lat, lng, year),
-    [lat, lng, year],
-  );
+  // The Point Analysis panel MUST only appear when real raster data is available for the clicked location
+  if (!raster || !selectedPixel || selectedPixel.isNoData || selectedPixel.value === null) {
+    return null;
+  }
+
+  const currentNdvi = selectedPixel.value;
+  const currentCls = selectedPixel.vegClass as VegClass | null;
+  const stats = raster.statistics;
 
   return (
-    <div className="glass-panel absolute right-3 top-3 z-[600] flex max-h-[calc(100%-1.5rem)] w-96 flex-col overflow-hidden rounded-2xl animate-ticker">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+    <div className="glass-panel absolute right-3 top-3 z-[600] flex max-h-[calc(100%-1.5rem)] w-96 flex-col overflow-hidden rounded-2xl animate-ticker border border-border bg-[var(--surface-0)] shadow-2xl">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-[var(--surface-1)]">
         <div className="flex items-center gap-2">
-          <div
-            className="h-6 w-6 rounded-md"
-            style={{ background: ndviColor(ndvi) }}
-          />
+          <div className="grid h-6 w-6 place-items-center rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-mono text-[10px]">
+            <Layers className="h-3.5 w-3.5" />
+          </div>
 
           <div>
-            <div className="text-sm font-semibold">Point Analysis</div>
-
-            <div className="font-mono text-[10px] text-muted-foreground">
+            <div className="text-sm font-bold text-foreground">GeoTIFF Point Analysis</div>
+            <div className="font-mono text-[10px] text-muted-foreground font-medium">
               {formatCoord(lat, "lat")} · {formatCoord(lng, "lng")}
             </div>
           </div>
@@ -63,133 +46,78 @@ export default function NDVIStats({
 
         <button
           onClick={onClose}
-          className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground"
+          className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground transition cursor-pointer"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div
-          className="mb-3 rounded-xl border border-border p-4"
-          style={{
-            background:
-              "linear-gradient(135deg, oklch(0.24 0.03 250 / 60%), oklch(0.18 0.03 250 / 60%))",
-          }}
-        >
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            Current NDVI · {year}
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 font-mono text-xs">
+        {/* Main NDVI Value Card */}
+        <div className="mb-3 rounded-xl border border-border bg-[var(--surface-1)] p-4 shadow-sm">
+          <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            <span className="truncate max-w-[220px]">{raster.fileName}</span>
+            {stats.isSampled && (
+              <span className="rounded bg-amber-500/20 px-1 py-0.5 text-[9px] text-amber-600 dark:text-amber-400 font-bold border border-amber-500/30">
+                Sampled
+              </span>
+            )}
           </div>
 
           <div className="mt-1 flex items-baseline gap-2">
             <span
               className="font-mono text-4xl font-bold"
-              style={{ color: ndviColor(ndvi) }}
+              style={{ color: ndviColor(currentNdvi) }}
             >
-              {ndvi.toFixed(3)}
+              {currentNdvi.toFixed(3)}
             </span>
 
-            <VegBadge cls={cls} />
+            {currentCls && <VegBadge cls={currentCls} />}
           </div>
 
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
+          {/* Matrix Row / Col detail for GeoTIFF */}
+          <div className="mt-2 text-[10px] text-muted-foreground font-medium">
+            Matrix: Row <span className="text-foreground font-bold">{selectedPixel.row}</span>, Col <span className="text-foreground font-bold">{selectedPixel.col}</span>
+          </div>
+
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-3)] border border-border">
             <div className="h-full ndvi-swatch" />
           </div>
 
           <div className="relative -mt-2 h-2" aria-hidden>
             <div
-              className="absolute -top-1 h-3 w-0.5 rounded-full bg-foreground shadow-[0_0_6px_oklch(1_0_0)]"
+              className="absolute -top-1 h-3 w-0.5 rounded-full bg-foreground shadow-[0_0_6px_var(--color-foreground)]"
               style={{
-                left: `${((ndvi + 0.2) / 1.15) * 100}%`,
+                left: `${((currentNdvi + 0.2) / 1.15) * 100}%`,
               }}
             />
           </div>
         </div>
 
+        {/* 6-box Statistics Grid */}
         <div className="mb-4 grid grid-cols-3 gap-2">
-          <Stat label="Min" value={stats.min.toFixed(2)} />
-          <Stat label="Max" value={stats.max.toFixed(2)} />
+          <Stat label="Min" value={stats.minimum.toFixed(2)} />
+          <Stat label="Max" value={stats.maximum.toFixed(2)} />
           <Stat label="Mean" value={stats.mean.toFixed(2)} />
           <Stat label="Median" value={stats.median.toFixed(2)} />
-          <Stat label="Std Dev" value={stats.std.toFixed(3)} />
-          <Stat
-            label="Veg %"
-            value={`${stats.vegPct.toFixed(0)}%`}
-            accent
-          />
+          <Stat label="Std Dev" value={stats.standardDeviation.toFixed(3)} />
+          <Stat label="Veg %" value={`${stats.vegetationPercentage.toFixed(0)}%`} accent />
         </div>
 
+        {/* Histogram Section Header */}
         <div className="mb-2 flex items-center justify-between">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Pixel distribution
+          <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+            Raster Pixel Distribution
           </div>
 
-          <span className="font-mono text-[10px] text-muted-foreground">
-            n = {stats.histogram.reduce((sum, bin) => sum + bin.count, 0)}
+          <span className="font-mono text-[10px] text-muted-foreground font-semibold">
+            n = {stats.validPixelCount.toLocaleString()}
           </span>
         </div>
 
-        <div className="h-40 rounded-lg border border-border bg-[var(--surface-1)] p-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={stats.histogram}
-              margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="oklch(1 0 0 / 6%)"
-                vertical={false}
-              />
-
-              <XAxis
-                dataKey="bin"
-                tick={{
-                  fill: "var(--color-muted-foreground)",
-                  fontSize: 9,
-                  fontFamily: "JetBrains Mono",
-                }}
-                tickFormatter={(value: number) => value.toFixed(1)}
-                stroke="oklch(1 0 0 / 15%)"
-              />
-
-              <YAxis
-                tick={{
-                  fill: "var(--color-muted-foreground)",
-                  fontSize: 9,
-                  fontFamily: "JetBrains Mono",
-                }}
-                stroke="oklch(1 0 0 / 15%)"
-              />
-
-              <Tooltip
-                contentStyle={{
-                  background: "var(--surface-2)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 8,
-                  fontSize: 11,
-                }}
-                labelFormatter={(value) =>
-                  `NDVI ${Number(value).toFixed(2)}`
-                }
-                cursor={{ fill: "oklch(1 0 0 / 5%)" }}
-              />
-
-              <ReferenceLine
-                x={ndvi}
-                stroke="oklch(0.95 0 0)"
-                strokeDasharray="3 3"
-              />
-
-              <Bar dataKey="count" radius={[3, 3, 0, 0]}>
-                {stats.histogram.map((bin, index) => (
-                  <rect
-                    key={index}
-                    fill={ndviColor(bin.bin)}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+        {/* Histogram Chart */}
+        <div className="h-40 rounded-lg border border-border bg-[var(--surface-1)] p-2 shadow-sm">
+          <Histogram histogram={stats.histogram} currentNdvi={currentNdvi} />
         </div>
       </div>
     </div>
@@ -207,16 +135,16 @@ function Stat({
 }) {
   return (
     <div
-      className={`rounded-lg border border-border p-2 ${
+      className={`rounded-lg border border-border p-2 shadow-sm ${
         accent ? "bg-primary/10" : "bg-[var(--surface-1)]"
       }`}
     >
-      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
+      <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
         {label}
       </div>
 
       <div
-        className={`font-mono text-sm font-semibold ${
+        className={`font-mono text-sm font-bold ${
           accent ? "text-primary" : "text-foreground"
         }`}
       >
@@ -229,32 +157,32 @@ function Stat({
 function VegBadge({ cls }: { cls: VegClass }) {
   const styles: Record<VegClass, { color: string; bg: string }> = {
     Water: {
-      color: "oklch(0.9 0.05 240)",
-      bg: "oklch(0.4 0.15 250 / 30%)",
+      color: "oklch(0.4 0.15 250)",
+      bg: "oklch(0.4 0.15 250 / 15%)",
     },
     "Bare land": {
-      color: "oklch(0.85 0.1 60)",
-      bg: "oklch(0.55 0.16 40 / 30%)",
+      color: "oklch(0.55 0.16 40)",
+      bg: "oklch(0.55 0.16 40 / 15%)",
     },
     "Sparse vegetation": {
-      color: "oklch(0.9 0.14 90)",
-      bg: "oklch(0.7 0.15 90 / 30%)",
+      color: "oklch(0.55 0.15 90)",
+      bg: "oklch(0.7 0.15 90 / 15%)",
     },
     "Moderate vegetation": {
-      color: "oklch(0.9 0.15 140)",
-      bg: "oklch(0.7 0.18 140 / 30%)",
+      color: "oklch(0.45 0.18 140)",
+      bg: "oklch(0.7 0.18 140 / 15%)",
     },
     "Dense vegetation": {
-      color: "oklch(0.85 0.17 150)",
-      bg: "oklch(0.5 0.18 150 / 40%)",
+      color: "oklch(0.35 0.18 150)",
+      bg: "oklch(0.5 0.18 150 / 20%)",
     },
   };
 
-  const style = styles[cls];
+  const style = styles[cls] || styles["Bare land"];
 
   return (
     <span
-      className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+      className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border border-border shadow-sm"
       style={{
         color: style.color,
         background: style.bg,

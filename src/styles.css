@@ -4,20 +4,6 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
- * Design system definition.
- *
- * The @theme inline block maps CSS custom properties to Tailwind utility
- * classes (e.g. --color-primary -> bg-primary, text-primary).
- *
- * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
- *
- * To add a new semantic color:
- * 1. Add the variable to :root (light value) and .dark (dark value)
- * 2. Register it in @theme inline as --color-<name>: var(--<name>)
- */
-
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -61,9 +47,69 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* Light Theme Variables — Professional Enterprise GIS Style (ArcGIS / QGIS) */
 :root {
   --radius: 0.5rem;
-  /* BhuDrishti — scientific dark theme. Deep space navy + terminal cyan + NDVI green accents. */
+  --background: oklch(0.97 0.005 250); /* #F4F6F9 */
+  --foreground: oklch(0.24 0.02 250); /* #1F2937 */
+  --surface-0: oklch(1 0 0); /* #FFFFFF */
+  --surface-1: oklch(0.975 0.003 250); /* #F8FAFC */
+  --surface-2: oklch(0.95 0.005 250); /* #F1F5F9 */
+  --surface-3: oklch(0.91 0.008 250); /* #E2E8F0 */
+  --card: oklch(1 0 0); /* #FFFFFF */
+  --card-foreground: oklch(0.24 0.02 250); /* #1F2937 */
+  --popover: oklch(1 0 0); /* #FFFFFF */
+  --popover-foreground: oklch(0.24 0.02 250); /* #1F2937 */
+  --primary: oklch(0.58 0.17 175); /* Teal accent */
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.95 0.005 250);
+  --secondary-foreground: oklch(0.24 0.02 250);
+  --muted: oklch(0.95 0.005 250);
+  --muted-foreground: oklch(0.42 0.02 250); /* #4B5563 */
+  --accent: oklch(0.58 0.17 175);
+  --accent-foreground: oklch(0.99 0 0);
+  --destructive: oklch(0.6 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --warning: oklch(0.7 0.17 75);
+  --success: oklch(0.55 0.18 155);
+  --info: oklch(0.55 0.16 210);
+  --border: oklch(0.84 0.015 250); /* #C5CDD8 medium grey border */
+  --input: oklch(0.84 0.015 250); /* #C5CDD8 */
+  --ring: oklch(0.58 0.17 175);
+  --chart-1: oklch(0.58 0.17 175);
+  --chart-2: oklch(0.48 0.16 210);
+  --chart-3: oklch(0.65 0.17 75);
+  --chart-4: oklch(0.58 0.19 30);
+  --chart-5: oklch(0.6 0.18 300);
+  --sidebar: oklch(1 0 0); /* #FFFFFF */
+  --sidebar-foreground: oklch(0.24 0.02 250); /* #1F2937 */
+  --sidebar-primary: oklch(0.58 0.17 175);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.95 0.005 250);
+  --sidebar-accent-foreground: oklch(0.24 0.02 250);
+  --sidebar-border: oklch(0.84 0.015 250); /* #C5CDD8 */
+  --sidebar-ring: oklch(0.58 0.17 175);
+
+  --gradient-ndvi: linear-gradient(
+    90deg,
+    oklch(0.5 0.2 25) 0%,
+    oklch(0.6 0.17 55) 25%,
+    oklch(0.85 0.18 95) 50%,
+    oklch(0.78 0.2 140) 75%,
+    oklch(0.45 0.17 150) 100%
+  );
+  --gradient-panel: linear-gradient(
+    180deg,
+    oklch(1 0 0 / 100%),
+    oklch(1 0 0 / 100%)
+  );
+  --shadow-glow: 0 0 0 1px oklch(0.84 0.015 250),
+    0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-panel: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* Dark Theme Variables — Unchanged Scientific Dark Theme */
+.dark {
   --background: oklch(0.16 0.02 250);
   --foreground: oklch(0.95 0.01 220);
   --surface-0: oklch(0.14 0.022 250);
@@ -104,21 +150,6 @@
   --sidebar-border: oklch(0.3 0.03 250 / 50%);
   --sidebar-ring: oklch(0.72 0.16 195);
 
-  /* NDVI gradient stops */
-  --ndvi-water: oklch(0.4 0.14 260);
-  --ndvi-bare: oklch(0.55 0.16 40);
-  --ndvi-sparse: oklch(0.82 0.17 90);
-  --ndvi-moderate: oklch(0.78 0.19 140);
-  --ndvi-dense: oklch(0.55 0.19 150);
-
-  --gradient-ndvi: linear-gradient(
-    90deg,
-    oklch(0.5 0.2 25) 0%,
-    oklch(0.6 0.17 55) 25%,
-    oklch(0.85 0.18 95) 50%,
-    oklch(0.78 0.2 140) 75%,
-    oklch(0.45 0.17 150) 100%
-  );
   --gradient-panel: linear-gradient(
     180deg,
     oklch(0.22 0.03 250 / 70%),
@@ -127,41 +158,6 @@
   --shadow-glow: 0 0 0 1px oklch(0.72 0.16 195 / 25%),
     0 8px 32px -8px oklch(0.72 0.16 195 / 20%);
   --shadow-panel: 0 20px 60px -20px oklch(0 0 0 / 60%);
-}
-
-.dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
 }
 
 @layer base {
@@ -194,9 +190,9 @@
 }
 
 @utility glass-panel {
-  background: var(--gradient-panel);
+  background: var(--surface-0);
   backdrop-filter: blur(14px) saturate(140%);
-  border: 1px solid oklch(1 0 0 / 8%);
+  border: 1px solid var(--color-border);
   box-shadow: var(--shadow-panel);
 }
 
@@ -214,22 +210,27 @@
   );
 }
 
-/* Leaflet dark tuning */
+/* Leaflet Container Styling */
 .leaflet-container {
-  background: oklch(0.14 0.022 250) !important;
+  background: var(--surface-0) !important;
   font-family: inherit;
 }
+
 .leaflet-control-attribution,
 .leaflet-control-zoom a {
-  background: oklch(0.19 0.024 250 / 90%) !important;
+  background: var(--surface-0) !important;
   color: var(--color-foreground) !important;
-  border-color: oklch(1 0 0 / 10%) !important;
+  border: 1px solid var(--color-border) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
 }
+
 .leaflet-control-zoom a {
   border-radius: 6px !important;
   margin-bottom: 4px !important;
 }
-.leaflet-tile-pane {
+
+/* Apply dark filter on OSM tile layer ONLY in dark mode */
+.dark .leaflet-tile-pane {
   filter: brightness(0.85) contrast(1.05) hue-rotate(180deg) invert(1);
 }
 
