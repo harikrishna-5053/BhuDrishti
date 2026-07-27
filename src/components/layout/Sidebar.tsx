@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { LayerState } from "@/components/gis/GISMap";
 import type { WorkspaceItem, LogLevel } from "@/lib/types";
+
 const LAYER_META: {
   key: keyof LayerState;
   label: string;
@@ -57,15 +58,18 @@ export default function Sidebar({
   layers,
   setLayers,
   onPushLog,
+  onOpenUpload,
+  onSelectDataset,
 }: {
-  open:boolean;
-  onToggle:()=>void;
-  layers:LayerState;
-  setLayers:Dispatch<SetStateAction<LayerState>>;
-  onPushLog:(level:"INFO"|"SUCCESS"|"WARN"|"ERROR",msg:string)=>void;
+  open: boolean;
+  onToggle: () => void;
+  layers: LayerState;
+  setLayers: Dispatch<SetStateAction<LayerState>>;
+  onPushLog: (level: LogLevel, msg: string) => void;
+  onOpenUpload: () => void;
+  onSelectDataset?: (item: WorkspaceItem) => void;
 }) {
-
-return (
+  return (
     <aside
       className={`relative flex shrink-0 flex-col border-r border-border bg-[var(--surface-0)] transition-[width] duration-300 ease-out ${
         open ? "w-[340px]" : "w-14"
@@ -73,31 +77,45 @@ return (
     >
       <button
         onClick={onToggle}
-        className="absolute -right-3 top-6 z-10 grid h-6 w-6 place-items-center rounded-full border border-border bg-[var(--surface-2)] text-muted-foreground shadow-md hover:text-primary"
+        className="absolute -right-3 top-6 z-10 grid h-6 w-6 place-items-center rounded-full border border-border bg-[var(--surface-2)] text-muted-foreground shadow-md hover:text-primary transition"
+        title={open ? "Collapse sidebar" : "Expand sidebar"}
       >
         {open ? <ChevronLeft className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
       </button>
 
       {open ? (
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-          <WorkspaceSection onPushLog={onPushLog} />
+          <WorkspaceSection
+            onPushLog={onPushLog}
+            onOpenUpload={onOpenUpload}
+            onSelectDataset={onSelectDataset}
+          />
           <ProcessingSection onPushLog={onPushLog} />
           <LayerManagerSection layers={layers} setLayers={setLayers} />
         </div>
       ) : (
         <div className="flex flex-1 flex-col items-center gap-4 pt-6">
-          {[FolderOpen, Play, Layers].map((Icon, i) => (
-            <button
-              key={i}
-              className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground hover:bg-[var(--surface-2)] hover:text-primary"
-            >
-              <Icon className="h-4 w-4" />
-            </button>
-          ))}
+          {[
+            { icon: FolderOpen, label: "Workspace" },
+            { icon: Play, label: "Processing" },
+            { icon: Layers, label: "Layers" },
+          ].map((item, i) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={i}
+                onClick={onToggle}
+                title={`Expand & view ${item.label}`}
+                className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground hover:bg-[var(--surface-2)] hover:text-primary transition"
+              >
+                <Icon className="h-4 w-4" />
+              </button>
+            );
+          })}
         </div>
       )}
     </aside>
-);
+  );
 }
 
 function SectionHeader({
@@ -126,13 +144,22 @@ function SectionHeader({
   );
 }
 
-function WorkspaceSection({ onPushLog }: { onPushLog: (l: LogLevel, m: string) => void }) {
+function WorkspaceSection({
+  onPushLog,
+  onOpenUpload,
+  onSelectDataset,
+}: {
+  onPushLog: (l: LogLevel, m: string) => void;
+  onOpenUpload: () => void;
+  onSelectDataset?: (item: WorkspaceItem) => void;
+}) {
   const [activeProject, setActiveProject] = useState(PROJECTS[0].id);
+
   return (
     <section className="glass-panel rounded-xl p-3">
       <SectionHeader icon={FolderOpen} title="Workspace" count="3 projects" />
       <button
-        onClick={() => onPushLog("INFO", "Upload dialog opened for Sentinel-2 dataset")}
+        onClick={onOpenUpload}
         className="mb-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/10 px-3 py-2.5 text-xs text-primary transition hover:bg-primary/15"
       >
         <Upload className="h-3.5 w-3.5" />
@@ -145,7 +172,10 @@ function WorkspaceSection({ onPushLog }: { onPushLog: (l: LogLevel, m: string) =
         {PROJECTS.map((p) => (
           <button
             key={p.id}
-            onClick={() => setActiveProject(p.id)}
+            onClick={() => {
+              setActiveProject(p.id);
+              onPushLog("INFO", `Switched active project to ${p.name}`);
+            }}
             className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs transition ${
               activeProject === p.id
                 ? "bg-primary/15 text-foreground ring-1 ring-primary/40"
@@ -170,9 +200,13 @@ function WorkspaceSection({ onPushLog }: { onPushLog: (l: LogLevel, m: string) =
           Recent datasets
         </div>
         {DATASETS.map((d) => (
-          <div
+          <button
             key={d.id}
-            className="group flex items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-[var(--surface-2)]"
+            onClick={() => {
+              onPushLog("INFO", `Loaded dataset tile ${d.tile} (${d.name})`);
+              if (onSelectDataset) onSelectDataset(d);
+            }}
+            className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition hover:bg-[var(--surface-2)] text-foreground"
           >
             <Database className="h-3.5 w-3.5 shrink-0 text-accent" />
             <div className="min-w-0 flex-1">
@@ -181,8 +215,8 @@ function WorkspaceSection({ onPushLog }: { onPushLog: (l: LogLevel, m: string) =
                 {d.date} · {d.tile} · {d.cloud}% cloud
               </div>
             </div>
-            <ArrowUpRight className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100" />
-          </div>
+            <ArrowUpRight className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100 text-primary" />
+          </button>
         ))}
       </div>
     </section>
@@ -306,6 +340,7 @@ function LayerManagerSection({
                   className={`grid h-6 w-6 place-items-center rounded ${
                     state.visible ? "text-primary" : "text-muted-foreground"
                   }`}
+                  title={state.visible ? "Hide layer" : "Show layer"}
                 >
                   {state.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
                 </button>
@@ -321,6 +356,7 @@ function LayerManagerSection({
                   <button
                     onClick={() => move(i, -1)}
                     className="grid h-3.5 w-4 place-items-center text-muted-foreground hover:text-primary"
+                    title="Move layer up"
                   >
                     <svg viewBox="0 0 8 5" className="h-2 w-2 fill-current">
                       <path d="M4 0 L8 5 L0 5 Z" />
@@ -329,6 +365,7 @@ function LayerManagerSection({
                   <button
                     onClick={() => move(i, 1)}
                     className="grid h-3.5 w-4 place-items-center text-muted-foreground hover:text-primary"
+                    title="Move layer down"
                   >
                     <svg viewBox="0 0 8 5" className="h-2 w-2 fill-current">
                       <path d="M0 0 L8 0 L4 5 Z" />

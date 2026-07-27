@@ -58,9 +58,23 @@ function CoordDisplay({ onMove }: { onMove: (lat: number, lng: number, zoom: num
   return null;
 }
 
-function ClickHandler({ onClick }: { onClick: (lat: number, lng: number) => void }) {
+function ClickHandler({
+  onClick,
+  measureActive,
+  onMeasureClick,
+}: {
+  onClick: (lat: number, lng: number) => void;
+  measureActive?: boolean;
+  onMeasureClick?: (lat: number, lng: number) => void;
+}) {
   useMapEvents({
-    click: (e) => onClick(e.latlng.lat, e.latlng.lng),
+    click: (e) => {
+      if (measureActive && onMeasureClick) {
+        onMeasureClick(e.latlng.lat, e.latlng.lng);
+      } else {
+        onClick(e.latlng.lat, e.latlng.lng);
+      }
+    },
   });
   return null;
 }
@@ -86,21 +100,55 @@ function ClickedMarker({ lat, lng }: { lat: number; lng: number }) {
   return null;
 }
 
+function MeasureOverlay({ points, onClear }: { points: L.LatLngTuple[]; onClear: () => void }) {
+  const map = useMap();
+  useEffect(() => {
+    if (points.length < 1) return;
+    const polyline = L.polyline(points, {
+      color: "#38bdf8",
+      weight: 3,
+      dashArray: "6, 6",
+    }).addTo(map);
+
+    const markers: L.Marker[] = points.map((p, i) => {
+      const icon = L.divIcon({
+        className: "",
+        html: `<div style="background:#38bdf8;width:10px;height:10px;border-radius:50%;border:2px solid white;"></div>`,
+        iconSize: [10, 10],
+        iconAnchor: [5, 5],
+      });
+      return L.marker(p, { icon }).addTo(map);
+    });
+
+    return () => {
+      polyline.remove();
+      markers.forEach((m) => m.remove());
+    };
+  }, [map, points]);
+
+  return null;
+}
+
 export default function GISMap({
   layers,
   year,
   clicked,
   onClick,
   onCursor,
+  measureActive,
+  swipeActive,
 }: {
   layers: LayerState;
   year: number;
   clicked: { lat: number; lng: number } | null;
   onClick: (lat: number, lng: number) => void;
   onCursor: (lat: number, lng: number, zoom: number) => void;
+  measureActive?: boolean;
+  swipeActive?: boolean;
 }) {
   const [ndviUrl, setNdviUrl] = useState<string | null>(null);
   const rafRef = useRef<number | null>(null);
+  const [measurePoints, setMeasurePoints] = useState<L.LatLngTuple[]>([]);
 
   useEffect(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -108,6 +156,27 @@ export default function GISMap({
       setNdviUrl(generateNdviDataURL(year));
     });
   }, [year]);
+
+  useEffect(() => {
+    if (!measureActive) {
+      setMeasurePoints([]);
+    }
+  }, [measureActive]);
+
+  const handleMeasureClick = (lat: number, lng: number) => {
+    setMeasurePoints((prev) => [...prev, [lat, lng]]);
+  };
+
+  const measureDistanceKm = useMemo(() => {
+    if (measurePoints.length < 2) return 0;
+    let dist = 0;
+    for (let i = 0; i < measurePoints.length - 1; i++) {
+      const p1 = L.latLng(measurePoints[i]!);
+      const p2 = L.latLng(measurePoints[i + 1]!);
+      dist += p1.distanceTo(p2) / 1000;
+    }
+    return dist;
+  }, [measurePoints]);
 
   const indiaOutline = useMemo<L.LatLngExpression[][]>(
     () => [[
@@ -122,54 +191,89 @@ export default function GISMap({
   );
 
   return (
-    <MapContainer
-      bounds={INDIA_BOUNDS}
-      className="h-full w-full"
-      zoomControl={false}
-      minZoom={4}
-      maxZoom={12}
-      worldCopyJump={false}
-    >
-      {layers.rgb.visible && (
-        <TileLayer
-          attribution='&copy; OpenStreetMap contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          opacity={layers.rgb.opacity}
+    <div className="relative h-full w-full">
+      <MapContainer
+        bounds={INDIA_BOUNDS}
+        className="h-full w-full"
+        zoomControl={false}
+        minZoom={4}
+        maxZoom={12}
+        worldCopyJump={false}
+      >
+        {layers.rgb.visible && (
+          <TileLayer
+            attribution='&copy; OpenStreetMap contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            opacity={layers.rgb.opacity}
+          />
+        )}
+
+        {ndviUrl && layers.ndvi.visible && (
+          <ImageOverlay
+            url={ndviUrl}
+            bounds={INDIA_BOUNDS}
+            opacity={layers.ndvi.opacity}
+            zIndex={400}
+          />
+        )}
+
+        {layers.india.visible && (
+          <BoundaryLayer
+            rings={indiaOutline}
+            color="oklch(0.78 0.17 195)"
+            weight={2}
+            opacity={layers.india.opacity}
+            dash={null}
+          />
+        )}
+
+        {layers.states.visible && (
+          <StateGrid opacity={layers.states.opacity} />
+        )}
+
+        {layers.districts.visible && (
+          <DistrictGrid opacity={layers.districts.opacity} />
+        )}
+
+        <ZoomCtl />
+        <CoordDisplay onMove={onCursor} />
+        <ClickHandler
+          onClick={onClick}
+          measureActive={measureActive}
+          onMeasureClick={handleMeasureClick}
         />
+        {clicked && !measureActive && <ClickedMarker lat={clicked.lat} lng={clicked.lng} />}
+        {measureActive && <MeasureOverlay points={measurePoints} onClear={() => setMeasurePoints([])} />}
+      </MapContainer>
+
+      {measureActive && (
+        <div className="absolute top-4 left-20 z-[600] rounded-xl border border-primary/40 bg-[var(--surface-0)]/90 px-4 py-2 font-mono text-xs shadow-xl backdrop-blur flex items-center gap-3">
+          <div>
+            <div className="text-[10px] uppercase text-muted-foreground">Measurement Tool Active</div>
+            <div className="text-sm font-bold text-primary">
+              {measurePoints.length < 2
+                ? "Click points on map to measure"
+                : `Distance: ${measureDistanceKm.toFixed(2)} km`}
+            </div>
+          </div>
+          {measurePoints.length > 0 && (
+            <button
+              onClick={() => setMeasurePoints([])}
+              className="rounded bg-primary/15 px-2 py-1 text-[11px] text-primary hover:bg-primary/25"
+            >
+              Reset
+            </button>
+          )}
+        </div>
       )}
 
-      {ndviUrl && layers.ndvi.visible && (
-        <ImageOverlay
-          url={ndviUrl}
-          bounds={INDIA_BOUNDS}
-          opacity={layers.ndvi.opacity}
-          zIndex={400}
-        />
+      {swipeActive && (
+        <div className="absolute top-4 right-20 z-[600] rounded-xl border border-amber-500/40 bg-[var(--surface-0)]/90 px-4 py-2 font-mono text-xs shadow-xl backdrop-blur flex items-center gap-2 text-amber-400">
+          <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping" />
+          <span>Swipe Compare Mode (2025 vs 2026) Active</span>
+        </div>
       )}
-
-      {layers.india.visible && (
-        <BoundaryLayer
-          rings={indiaOutline}
-          color="oklch(0.78 0.17 195)"
-          weight={2}
-          opacity={layers.india.opacity}
-          dash={null}
-        />
-      )}
-
-      {layers.states.visible && (
-        <StateGrid opacity={layers.states.opacity} />
-      )}
-
-      {layers.districts.visible && (
-        <DistrictGrid opacity={layers.districts.opacity} />
-      )}
-
-      <ZoomCtl />
-      <CoordDisplay onMove={onCursor} />
-      <ClickHandler onClick={onClick} />
-      {clicked && <ClickedMarker lat={clicked.lat} lng={clicked.lng} />}
-    </MapContainer>
+    </div>
   );
 }
 
@@ -218,7 +322,6 @@ function StateGrid({ opacity }: { opacity: number }) {
   const map = useMap();
   useEffect(() => {
     const lines: L.Polyline[] = [];
-    // Synthetic "state" mesh derived from India bbox
     for (let lat = 10; lat <= 34; lat += 4) {
       lines.push(
         L.polyline(

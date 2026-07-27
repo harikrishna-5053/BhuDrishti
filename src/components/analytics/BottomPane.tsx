@@ -48,6 +48,9 @@ export default function BottomPane({
   setCompareA,
   setCompareB,
   clicked,
+  onOpenResult,
+  onExportGeoTIFF,
+  onViewResultGauge,
 }: {
   tab: "temporal" | "change" | "results" | "log";
   setTab: (t: "temporal" | "change" | "results" | "log") => void;
@@ -57,6 +60,9 @@ export default function BottomPane({
   setCompareA: (y: number) => void;
   setCompareB: (y: number) => void;
   clicked: { lat: number; lng: number } | null;
+  onOpenResult?: (name: string, year: number) => void;
+  onExportGeoTIFF?: (name: string) => void;
+  onViewResultGauge?: (name: string) => void;
 }) {
   const point = clicked ?? { lat: 22.9, lng: 79.1 };
   return (
@@ -92,7 +98,13 @@ export default function BottomPane({
             setB={setCompareB}
           />
         )}
-        {tab === "results" && <ResultsPanel />}
+        {tab === "results" && (
+          <ResultsPanel
+            onOpenResult={onOpenResult}
+            onExportGeoTIFF={onExportGeoTIFF}
+            onViewResultGauge={onViewResultGauge}
+          />
+        )}
         {tab === "log" && <LogConsole logs={logs} />}
       </div>
     </div>
@@ -478,7 +490,15 @@ const RESULTS = [
   },
 ];
 
-function ResultsPanel() {
+function ResultsPanel({
+  onOpenResult,
+  onExportGeoTIFF,
+  onViewResultGauge,
+}: {
+  onOpenResult?: (name: string, year: number) => void;
+  onExportGeoTIFF?: (name: string) => void;
+  onViewResultGauge?: (name: string) => void;
+}) {
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       {RESULTS.map((r) => (
@@ -509,16 +529,28 @@ function ResultsPanel() {
               <MiniField label="Coverage" value={r.stats.coverage} />
             </div>
             <div className="mt-3 flex items-center gap-1.5">
-              <button className="flex-1 rounded-md bg-primary/15 px-2 py-1.5 text-xs font-medium text-primary hover:bg-primary/25">
-                <MapIcon className="mr-1 inline h-3 w-3" />
+              <button
+                onClick={() => onOpenResult && onOpenResult(r.name, r.year)}
+                className="flex-1 rounded-md bg-primary/15 px-2 py-1.5 text-xs font-medium text-primary hover:bg-primary/25 transition flex items-center justify-center gap-1"
+                title="Load raster result on map"
+              >
+                <MapIcon className="h-3 w-3" />
                 Open
               </button>
-              <button className="flex-1 rounded-md bg-[var(--surface-2)] px-2 py-1.5 text-xs font-medium text-foreground hover:bg-[var(--surface-3)]">
-                <Download className="mr-1 inline h-3 w-3" />
+              <button
+                onClick={() => onExportGeoTIFF && onExportGeoTIFF(r.name)}
+                className="flex-1 rounded-md bg-[var(--surface-2)] px-2 py-1.5 text-xs font-medium text-foreground hover:bg-[var(--surface-3)] transition flex items-center justify-center gap-1"
+                title="Export GeoTIFF file"
+              >
+                <Download className="h-3 w-3" />
                 GeoTIFF
               </button>
-              <button className="rounded-md bg-[var(--surface-2)] px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground">
-                <Gauge className="h-3 w-3" />
+              <button
+                onClick={() => onViewResultGauge && onViewResultGauge(r.name)}
+                className="rounded-md bg-[var(--surface-2)] p-1.5 text-xs text-muted-foreground hover:text-foreground transition"
+                title="View band statistics"
+              >
+                <Gauge className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>

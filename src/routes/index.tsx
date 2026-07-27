@@ -1,20 +1,19 @@
 import Header from "@/components/layout/Header";
 import { createFileRoute } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { formatCoord } from "@/lib/geo-format";
+import { lazy, Suspense, useEffect, useState } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import MainLayout from "@/components/layout/MainLayout";
-import type { LogEntry, LogLevel } from "@/lib/types";
+import type { LogEntry, LogLevel, WorkspaceItem } from "@/lib/types";
 import BottomPane from "@/components/analytics/BottomPane";
 import NDVIStats from "@/components/analytics/NDVIStats";
-import {
-  ndviAt
-} from "@/lib/ndvi";
+import { ndviAt } from "@/lib/ndvi";
 import type { LayerState } from "@/components/gis/GISMap";
-import MapOverlays, {
-  MapLoading,
-} from "@/components/gis/MapOverlays";
+import MapOverlays, { MapLoading } from "@/components/gis/MapOverlays";
 
+import UploadModal from "@/components/modals/UploadModal";
+import SettingsModal from "@/components/modals/SettingsModal";
+import ExportGeoTIFFModal from "@/components/modals/ExportGeoTIFFModal";
+import ResultDetailsModal from "@/components/modals/ResultDetailsModal";
 
 const GISMap = lazy(() => import("@/components/gis/GISMap"));
 
@@ -47,8 +46,6 @@ const INITIAL_LAYERS: LayerState = {
   custom: { visible: false, opacity: 0.7 },
 };
 
-
-
 function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [layers, setLayers] = useState<LayerState>(INITIAL_LAYERS);
@@ -67,6 +64,19 @@ function Dashboard() {
   >("temporal");
   const [compareA, setCompareA] = useState(2025);
   const [compareB, setCompareB] = useState(2026);
+
+  // Interactive Tools State
+  const [measureMode, setMeasureMode] = useState(false);
+  const [swipeMode, setSwipeMode] = useState(false);
+
+  // Modals State
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportResultName, setExportResultName] = useState("");
+  const [gaugeModalOpen, setGaugeModalOpen] = useState(false);
+  const [gaugeResultName, setGaugeResultName] = useState("");
+
   const [logs, setLogs] = useState<LogEntry[]>([
     { id: 1, time: "10:42:11", level: "INFO", msg: "Reading Sentinel-2 dataset S2B_T44QMG_20260118" },
     { id: 2, time: "10:42:14", level: "INFO", msg: "Applying Sen2Cor atmospheric correction" },
@@ -96,65 +106,136 @@ function Dashboard() {
     );
   };
 
-return (
-  <MainLayout
-    header={
-      <Header
-        cursor={cursor}
-        year={year}
-        setYear={setYear}
-      />
-    }
-    sidebar={
-      <Sidebar
-        open={sidebarOpen}
-        onToggle={() => setSidebarOpen((v) => !v)}
-        layers={layers}
-        setLayers={setLayers}
+  const handleToggleMeasure = () => {
+    setMeasureMode((prev) => {
+      const next = !prev;
+      pushLog("INFO", next ? "Distance & Area Measurement tool activated" : "Measurement tool deactivated");
+      return next;
+    });
+  };
+
+  const handleToggleSwipe = () => {
+    setSwipeMode((prev) => {
+      const next = !prev;
+      pushLog("INFO", next ? "Swipe compare mode activated" : "Swipe compare mode deactivated");
+      if (next) setBottomTab("change");
+      return next;
+    });
+  };
+
+  const handleSelectDataset = (item: WorkspaceItem) => {
+    pushLog("SUCCESS", `Loaded dataset granule ${item.name} into map view`);
+    setClicked({ lat: 21.5 + Math.random() * 3, lng: 78.5 + Math.random() * 4 });
+  };
+
+  const handleOpenResult = (name: string, rYear: number) => {
+    setYear(rYear);
+    pushLog("SUCCESS", `Loaded result layer "${name}" onto map console`);
+  };
+
+  const handleExportGeoTIFF = (name: string) => {
+    setExportResultName(name);
+    setExportModalOpen(true);
+  };
+
+  const handleViewResultGauge = (name: string) => {
+    setGaugeResultName(name);
+    setGaugeModalOpen(true);
+  };
+
+  return (
+    <>
+      <MainLayout
+        header={
+          <Header
+            cursor={cursor}
+            year={year}
+            setYear={setYear}
+            measureActive={measureMode}
+            swipeActive={swipeMode}
+            onToggleMeasure={handleToggleMeasure}
+            onToggleSwipe={handleToggleSwipe}
+            onOpenSettings={() => setSettingsModalOpen(true)}
+          />
+        }
+        sidebar={
+          <Sidebar
+            open={sidebarOpen}
+            onToggle={() => setSidebarOpen((v) => !v)}
+            layers={layers}
+            setLayers={setLayers}
+            onPushLog={pushLog}
+            onOpenUpload={() => setUploadModalOpen(true)}
+            onSelectDataset={handleSelectDataset}
+          />
+        }
+      >
+        <div className="relative flex min-h-0 flex-1">
+          <div className="relative flex-1">
+            <ClientOnly fallback={<MapLoading />}>
+              <Suspense fallback={<MapLoading />}>
+                <GISMap
+                  layers={layers}
+                  year={year}
+                  clicked={clicked}
+                  onClick={handleClick}
+                  onCursor={(lat, lng, zoom) => setCursor({ lat, lng, zoom })}
+                  measureActive={measureMode}
+                  swipeActive={swipeMode}
+                />
+              </Suspense>
+            </ClientOnly>
+
+            <MapOverlays cursor={cursor} year={year} />
+          </div>
+
+          {clicked && !measureMode && (
+            <NDVIStats
+              lat={clicked.lat}
+              lng={clicked.lng}
+              year={year}
+              onClose={() => setClicked(null)}
+            />
+          )}
+        </div>
+
+        <BottomPane
+          tab={bottomTab}
+          setTab={setBottomTab}
+          logs={logs}
+          compareA={compareA}
+          compareB={compareB}
+          setCompareA={setCompareA}
+          setCompareB={setCompareB}
+          clicked={clicked}
+          onOpenResult={handleOpenResult}
+          onExportGeoTIFF={handleExportGeoTIFF}
+          onViewResultGauge={handleViewResultGauge}
+        />
+      </MainLayout>
+
+      {/* Modals */}
+      <UploadModal
+        open={uploadModalOpen}
+        onClose={() => setUploadModalOpen(false)}
         onPushLog={pushLog}
       />
-    }
-  >
-    <div className="relative flex min-h-0 flex-1">
-      <div className="relative flex-1">
-        <ClientOnly fallback={<MapLoading />}>
-          <Suspense fallback={<MapLoading />}>
-            <GISMap
-              layers={layers}
-              year={year}
-              clicked={clicked}
-              onClick={handleClick}
-              onCursor={(lat, lng, zoom) =>
-                setCursor({ lat, lng, zoom })
-              }
-            />
-          </Suspense>
-        </ClientOnly>
-
-        <MapOverlays cursor={cursor} year={year} />
-      </div>
-
-      {clicked && (
-        <NDVIStats
-          lat={clicked.lat}
-          lng={clicked.lng}
-          year={year}
-          onClose={() => setClicked(null)}
-        />
-      )}
-    </div>
-
-    <BottomPane
-      tab={bottomTab}
-      setTab={setBottomTab}
-      logs={logs}
-      compareA={compareA}
-      compareB={compareB}
-      setCompareA={setCompareA}
-      setCompareB={setCompareB}
-      clicked={clicked}
-    />
-  </MainLayout>
-);
+      <SettingsModal
+        open={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        onPushLog={pushLog}
+      />
+      <ExportGeoTIFFModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        resultName={exportResultName}
+        onPushLog={pushLog}
+      />
+      <ResultDetailsModal
+        open={gaugeModalOpen}
+        onClose={() => setGaugeModalOpen(false)}
+        resultName={gaugeResultName}
+      />
+    </>
+  );
 }
-

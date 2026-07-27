@@ -5,26 +5,42 @@ import {
   Settings2,
 } from "lucide-react";
 import { formatCoord } from "@/lib/geo-format";
+
 function IconBtn({
   icon: Icon,
   label,
+  active,
+  onClick,
 }: {
   icon: typeof Ruler;
   label: string;
+  active?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <button
       title={label}
-      className="grid h-8 w-8 place-items-center rounded-md border border-border bg-[var(--surface-1)] text-muted-foreground transition hover:border-primary/60 hover:text-primary"
+      onClick={onClick}
+      className={`grid h-8 w-8 place-items-center rounded-md border transition ${
+        active
+          ? "border-primary bg-primary text-primary-foreground shadow-[var(--shadow-glow)]"
+          : "border-border bg-[var(--surface-1)] text-muted-foreground hover:border-primary/60 hover:text-primary"
+      }`}
     >
       <Icon className="h-4 w-4" />
     </button>
   );
 }
+
 export default function Header({
   cursor,
   year,
   setYear,
+  measureActive,
+  swipeActive,
+  onToggleMeasure,
+  onToggleSwipe,
+  onOpenSettings,
 }: {
   cursor: {
     lat: number;
@@ -33,12 +49,15 @@ export default function Header({
   };
   year: number;
   setYear: (y: number) => void;
+  measureActive?: boolean;
+  swipeActive?: boolean;
+  onToggleMeasure?: () => void;
+  onToggleSwipe?: () => void;
+  onOpenSettings?: () => void;
 }) {
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-[var(--surface-0)] px-4">
-
       {/* Left Logo Section */}
-
       <div className="flex items-center gap-3">
         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground shadow-[0_0_16px_oklch(0.78_0.17_168_/_40%)]">
           <Globe2 className="h-5 w-5" />
@@ -57,6 +76,7 @@ export default function Header({
           </span>
         </div>
       </div>
+
       {/* Middle Controls */}
       <div className="hidden items-center gap-2 md:flex">
         <div className="flex items-center gap-1 rounded-md border border-border bg-[var(--surface-1)] p-1">
@@ -73,21 +93,26 @@ export default function Header({
               {y}
             </button>
           ))}
-
         </div>
         <IconBtn
           icon={Ruler}
-          label="Measure"
+          label="Measure Distance & Area"
+          active={measureActive}
+          onClick={onToggleMeasure}
         />
         <IconBtn
           icon={GitCompareArrows}
-          label="Swipe compare"
+          label="Swipe compare mode"
+          active={swipeActive}
+          onClick={onToggleSwipe}
         />
         <IconBtn
           icon={Settings2}
-          label="Settings"
+          label="Console Settings"
+          onClick={onOpenSettings}
         />
       </div>
+
       {/* Right Status Section */}
       <div className="flex items-center gap-3 font-mono text-[11px] text-muted-foreground">
         <span className="hidden md:inline">
