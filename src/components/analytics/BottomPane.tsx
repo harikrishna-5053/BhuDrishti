@@ -30,9 +30,7 @@ import {
   YAxis,
 } from "recharts";
 
-import {
-  monthlyTimeline,
-} from "@/lib/ndvi";
+import { monthlyTimeline } from "@/lib/ndvi";
 
 import { formatCoord } from "@/lib/geo-format";
 
@@ -88,7 +86,11 @@ export default function BottomPane({
           <TabBtn active={tab === "temporal"} onClick={() => setTab("temporal")} icon={BarChart3}>
             Temporal Analytics
           </TabBtn>
-          <TabBtn active={tab === "change"} onClick={() => setTab("change")} icon={GitCompareArrows}>
+          <TabBtn
+            active={tab === "change"}
+            onClick={() => setTab("change")}
+            icon={GitCompareArrows}
+          >
             Change Detection
           </TabBtn>
           <TabBtn active={tab === "results"} onClick={() => setTab("results")} icon={Sparkles}>
@@ -199,7 +201,9 @@ function TemporalPanel({ lat, lng }: { lat: number; lng: number }) {
   }, [lat, lng]);
 
   return (
-    <div className={`grid h-full gap-3 ${raster ? "grid-cols-1 lg:grid-cols-[1fr_360px]" : "grid-cols-1"}`}>
+    <div
+      className={`grid h-full gap-3 ${raster ? "grid-cols-1 lg:grid-cols-[1fr_360px]" : "grid-cols-1"}`}
+    >
       <div className="glass-panel flex h-full min-h-0 flex-col rounded-xl p-3 bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
         <div className="mb-2 flex items-center justify-between">
           <div>
@@ -217,8 +221,16 @@ function TemporalPanel({ lat, lng }: { lat: number; lng: number }) {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 4, right: 12, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-              <XAxis dataKey="month" tick={{ fill: "var(--color-muted-foreground)", fontSize: 10 }} stroke="var(--color-border)" />
-              <YAxis domain={[-0.1, 0.9]} tick={{ fill: "var(--color-muted-foreground)", fontSize: 10 }} stroke="var(--color-border)" />
+              <XAxis
+                dataKey="month"
+                tick={{ fill: "var(--color-muted-foreground)", fontSize: 10 }}
+                stroke="var(--color-border)"
+              />
+              <YAxis
+                domain={[-0.1, 0.9]}
+                tick={{ fill: "var(--color-muted-foreground)", fontSize: 10 }}
+                stroke="var(--color-border)"
+              />
               <Tooltip
                 contentStyle={{
                   background: "var(--surface-0)",
@@ -230,7 +242,13 @@ function TemporalPanel({ lat, lng }: { lat: number; lng: number }) {
                   boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
                 }}
               />
-              <Line type="monotone" dataKey="ndvi" stroke="var(--color-primary)" strokeWidth={2.5} dot={{ r: 3 }} />
+              <Line
+                type="monotone"
+                dataKey="ndvi"
+                stroke="var(--color-primary)"
+                strokeWidth={2.5}
+                dot={{ r: 3 }}
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -294,8 +312,15 @@ function ChangePanel({
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-              <XAxis dataKey="month" tick={{ fill: "var(--color-muted-foreground)", fontSize: 9 }} stroke="var(--color-border)" />
-              <YAxis tick={{ fill: "var(--color-muted-foreground)", fontSize: 9 }} stroke="var(--color-border)" />
+              <XAxis
+                dataKey="month"
+                tick={{ fill: "var(--color-muted-foreground)", fontSize: 9 }}
+                stroke="var(--color-border)"
+              />
+              <YAxis
+                tick={{ fill: "var(--color-muted-foreground)", fontSize: 9 }}
+                stroke="var(--color-border)"
+              />
               <Tooltip
                 contentStyle={{
                   background: "var(--surface-0)",
@@ -307,7 +332,13 @@ function ChangePanel({
                 }}
               />
               <ReferenceLine y={0} stroke="var(--color-border)" />
-              <Area type="monotone" dataKey="delta" stroke="var(--success)" fill="url(#pos)" strokeWidth={2} />
+              <Area
+                type="monotone"
+                dataKey="delta"
+                stroke="var(--success)"
+                fill="url(#pos)"
+                strokeWidth={2}
+              />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -327,7 +358,9 @@ function YearPicker({
 }) {
   return (
     <div>
-      <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </div>
       <div className="flex rounded-md border border-border bg-[var(--surface-1)] p-0.5">
         {[2024, 2025, 2026].map((y) => (
           <button
@@ -394,7 +427,10 @@ function ResultsPanel({
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       {RESULTS.map((r) => (
-        <div key={r.id} className="glass-panel overflow-hidden rounded-xl bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+        <div
+          key={r.id}
+          className="glass-panel overflow-hidden rounded-xl bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
+        >
           <div
             className="relative h-20 w-full"
             style={{
@@ -491,9 +527,7 @@ function LogConsole({ logs }: { logs: LogEntry[] }) {
         {logs.map((l) => (
           <div key={l.id} className="flex gap-3 animate-ticker">
             <span className="shrink-0 text-muted-foreground font-medium">{l.time}</span>
-            <span className={`w-14 shrink-0 font-bold ${colorFor(l.level)}`}>
-              {l.level}
-            </span>
+            <span className={`w-14 shrink-0 font-bold ${colorFor(l.level)}`}>{l.level}</span>
             <span className="text-foreground font-medium">{l.msg}</span>
           </div>
         ))}

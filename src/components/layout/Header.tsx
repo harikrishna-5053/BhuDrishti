@@ -1,13 +1,4 @@
-import {
-  Globe2,
-  Ruler,
-  GitCompareArrows,
-  Settings2,
-  Crop,
-  Printer,
-  Sun,
-  Moon,
-} from "lucide-react";
+import { Globe2, Ruler, GitCompareArrows, Settings2, Crop, Printer, Sun, Moon } from "lucide-react";
 import { formatCoord } from "@/lib/geo-format";
 import type { Theme } from "@/hooks/use-theme";
 
@@ -119,21 +110,13 @@ export default function Header({
           label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           onClick={onToggleTheme}
         />
-        <IconBtn
-          icon={Settings2}
-          label="Console Settings"
-          onClick={onOpenSettings}
-        />
+        <IconBtn icon={Settings2} label="Console Settings" onClick={onOpenSettings} />
       </div>
 
       {/* Right Status Section */}
       <div className="flex items-center gap-3 font-mono text-[11px] text-muted-foreground">
-        <span className="hidden md:inline font-medium">
-          CRS: EPSG:4326
-        </span>
-        <span className="hidden md:inline">
-          |
-        </span>
+        <span className="hidden md:inline font-medium">CRS: EPSG:4326</span>
+        <span className="hidden md:inline">|</span>
         <span className="font-medium">
           {formatCoord(cursor.lat, "lat")}
           {" , "}

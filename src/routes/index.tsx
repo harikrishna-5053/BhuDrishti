@@ -17,12 +17,21 @@ import NDVIGeoTIFFModal from "@/components/modals/NDVIGeoTIFFModal";
 import AOIStatsModal from "@/components/modals/AOIStatsModal";
 import CartographicExportModal from "@/components/modals/CartographicExportModal";
 import { useGeoTIFFStore } from "@/stores/geotiff-store";
-import { calculateAOIStatistics, type AOIStatsResult } from "@/lib/geotiff/calculate-aoi-statistics";
+import {
+  calculateAOIStatistics,
+  type AOIStatsResult,
+} from "@/lib/geotiff/calculate-aoi-statistics";
 import { useTheme } from "@/hooks/use-theme";
 
 const GISMap = lazy(() => import("@/components/gis/GISMap"));
 
-function ClientOnly({ children, fallback }: { children: React.ReactNode; fallback: React.ReactNode }) {
+function ClientOnly({
+  children,
+  fallback,
+}: {
+  children: React.ReactNode;
+  fallback: React.ReactNode;
+}) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   return <>{mounted ? children : fallback}</>;
@@ -66,9 +75,7 @@ function Dashboard() {
   const [clicked, setClicked] = useState<{ lat: number; lng: number } | null>(null);
   const [bottomPaneExpanded, setBottomPaneExpanded] = useState(false);
 
-  const [bottomTab, setBottomTab] = useState<
-    "temporal" | "change" | "results" | "log"
-  >("temporal");
+  const [bottomTab, setBottomTab] = useState<"temporal" | "change" | "results" | "log">("temporal");
   const [compareA, setCompareA] = useState(2025);
   const [compareB, setCompareB] = useState(2026);
 
@@ -100,12 +107,37 @@ function Dashboard() {
   }, [raster]);
 
   const [logs, setLogs] = useState<LogEntry[]>([
-    { id: 1, time: "10:42:11", level: "INFO", msg: "Reading Sentinel-2 dataset S2B_T44QMG_20260118" },
+    {
+      id: 1,
+      time: "10:42:11",
+      level: "INFO",
+      msg: "Reading Sentinel-2 dataset S2B_T44QMG_20260118",
+    },
     { id: 2, time: "10:42:14", level: "INFO", msg: "Applying Sen2Cor atmospheric correction" },
-    { id: 3, time: "10:42:47", level: "SUCCESS", msg: "NDVI generated for tile T44QMG (10 m, EPSG:4326)" },
-    { id: 4, time: "10:43:02", level: "INFO", msg: "Compositing periodic median mosaic (Jan 2026)" },
-    { id: 5, time: "10:43:35", level: "SUCCESS", msg: "Mosaic completed · 4 tiles merged · 1.2 GB" },
-    { id: 6, time: "10:44:01", level: "WARN", msg: "Tile T45QUE has 12% cloud cover — masked pixels excluded" },
+    {
+      id: 3,
+      time: "10:42:47",
+      level: "SUCCESS",
+      msg: "NDVI generated for tile T44QMG (10 m, EPSG:4326)",
+    },
+    {
+      id: 4,
+      time: "10:43:02",
+      level: "INFO",
+      msg: "Compositing periodic median mosaic (Jan 2026)",
+    },
+    {
+      id: 5,
+      time: "10:43:35",
+      level: "SUCCESS",
+      msg: "Mosaic completed · 4 tiles merged · 1.2 GB",
+    },
+    {
+      id: 6,
+      time: "10:44:01",
+      level: "WARN",
+      msg: "Tile T45QUE has 12% cloud cover — masked pixels excluded",
+    },
   ]);
 
   const pushLog = (level: LogLevel, msg: string) => {
@@ -126,7 +158,7 @@ function Dashboard() {
       setBottomPaneExpanded(true);
       pushLog(
         "INFO",
-        `Real GeoTIFF Point analysis: ${lat.toFixed(4)}°, ${lng.toFixed(4)}° · Row=${selectedPixel.row}, Col=${selectedPixel.col} · NDVI=${selectedPixel.value.toFixed(3)}`
+        `Real GeoTIFF Point analysis: ${lat.toFixed(4)}°, ${lng.toFixed(4)}° · Row=${selectedPixel.row}, Col=${selectedPixel.col} · NDVI=${selectedPixel.value.toFixed(3)}`,
       );
     }
   };
@@ -141,7 +173,12 @@ function Dashboard() {
       if (next) {
         setAoiMode(false);
       }
-      pushLog("INFO", next ? "Distance & Area Measurement tool activated" : "Measurement tool deactivated");
+      pushLog(
+        "INFO",
+        next
+          ? "GIS Measurement tool activated. Click points on map to measure distance & area."
+          : "Measurement tool deactivated",
+      );
       return next;
     });
   };
@@ -164,14 +201,22 @@ function Dashboard() {
       if (next) {
         setMeasureMode(false);
       }
-      pushLog("INFO", next ? "AOI Field Polygon tool activated. Click 3+ points on map to enclose region." : "AOI tool deactivated");
+      pushLog(
+        "INFO",
+        next
+          ? "AOI Field Polygon tool activated. Click 3+ points on map to enclose region."
+          : "AOI tool deactivated",
+      );
       return next;
     });
   };
 
   const handleAOIFinished = (points: [number, number][]) => {
     if (!raster) {
-      pushLog("WARN", "Please load an NDVI GeoTIFF raster to calculate clipped AOI polygon statistics.");
+      pushLog(
+        "WARN",
+        "Please load an NDVI GeoTIFF raster to calculate clipped AOI polygon statistics.",
+      );
       return;
     }
     const stats = calculateAOIStatistics(raster, points);
@@ -180,7 +225,7 @@ function Dashboard() {
       setAoiModalOpen(true);
       pushLog(
         "SUCCESS",
-        `AOI Field Polygon clipped: ${stats.areaHectares} ha (${stats.areaAcres} acres) · Mean NDVI=${stats.mean}, Veg Coverage=${stats.vegetationPercentage}%`
+        `AOI Field Polygon clipped: ${stats.areaHectares} ha (${stats.areaAcres} acres) · Mean NDVI=${stats.mean}, Veg Coverage=${stats.vegetationPercentage}%`,
       );
     }
   };
@@ -243,6 +288,7 @@ function Dashboard() {
                   onOutsideClick={handleOutsideClick}
                   onCursor={(lat, lng, zoom) => setCursor({ lat, lng, zoom })}
                   measureActive={measureMode}
+                  onToggleMeasure={handleToggleMeasure}
                   swipeActive={swipeMode}
                   aoiActive={aoiMode}
                   onAOIFinished={handleAOIFinished}
@@ -254,14 +300,19 @@ function Dashboard() {
             <MapOverlays cursor={cursor} year={year} />
           </div>
 
-          {clicked && raster && selectedPixel && !selectedPixel.isNoData && !measureMode && !aoiMode && (
-            <NDVIStats
-              lat={clicked.lat}
-              lng={clicked.lng}
-              year={year}
-              onClose={() => setClicked(null)}
-            />
-          )}
+          {clicked &&
+            raster &&
+            selectedPixel &&
+            !selectedPixel.isNoData &&
+            !measureMode &&
+            !aoiMode && (
+              <NDVIStats
+                lat={clicked.lat}
+                lng={clicked.lng}
+                year={year}
+                onClose={() => setClicked(null)}
+              />
+            )}
         </div>
 
         <BottomPane

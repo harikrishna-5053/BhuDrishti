@@ -9,7 +9,12 @@ interface ExportGeoTIFFModalProps {
   onPushLog: (level: LogLevel, msg: string) => void;
 }
 
-export default function ExportGeoTIFFModal({ open, onClose, resultName, onPushLog }: ExportGeoTIFFModalProps) {
+export default function ExportGeoTIFFModal({
+  open,
+  onClose,
+  resultName,
+  onPushLog,
+}: ExportGeoTIFFModalProps) {
   const [resolution, setResolution] = useState("10m");
   const [format, setFormat] = useState("cog");
   const [downloading, setDownloading] = useState(false);
@@ -18,16 +23,22 @@ export default function ExportGeoTIFFModal({ open, onClose, resultName, onPushLo
 
   const handleExport = () => {
     setDownloading(true);
-    onPushLog("INFO", `Preparing GeoTIFF export for ${resultName} (${resolution}, ${format.toUpperCase()})...`);
+    onPushLog(
+      "INFO",
+      `Preparing GeoTIFF export for ${resultName} (${resolution}, ${format.toUpperCase()})...`,
+    );
     setTimeout(() => {
       setDownloading(false);
       onPushLog("SUCCESS", `GeoTIFF export download initiated for ${resultName}`);
 
       // Trigger dummy file download
       const element = document.createElement("a");
-      const file = new Blob([`GeoTIFF Raster Data for ${resultName}\nResolution: ${resolution}\nCRS: EPSG:4326`], {
-        type: "text/plain",
-      });
+      const file = new Blob(
+        [`GeoTIFF Raster Data for ${resultName}\nResolution: ${resolution}\nCRS: EPSG:4326`],
+        {
+          type: "text/plain",
+        },
+      );
       element.href = URL.createObjectURL(file);
       element.download = `${resultName.replace(/[^a-z0-9]/gi, "_").toLowerCase()}_${resolution}.geotiff`;
       document.body.appendChild(element);
@@ -63,7 +74,9 @@ export default function ExportGeoTIFFModal({ open, onClose, resultName, onPushLo
         {/* Content */}
         <div className="p-5 space-y-4 font-mono text-xs">
           <div>
-            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">Spatial Resolution</label>
+            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">
+              Spatial Resolution
+            </label>
             <div className="grid grid-cols-3 gap-2">
               {[
                 { id: "10m", label: "10 m (Full)" },
@@ -87,7 +100,9 @@ export default function ExportGeoTIFFModal({ open, onClose, resultName, onPushLo
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">Raster Container Format</label>
+            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">
+              Raster Container Format
+            </label>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { id: "cog", label: "Cloud-Optimized GeoTIFF (COG)" },

@@ -2,7 +2,7 @@ declare module "georaster-layer-for-leaflet" {
   import L from "leaflet";
 
   export interface GeoRasterLayerOptions extends L.GridLayerOptions {
-    georaster?: any;
+    georaster?: unknown;
     pixelValuesToColorFn?: (pixelValues: number[]) => string | null;
     resolution?: number;
     opacity?: number;
@@ -14,5 +14,7 @@ declare module "georaster-layer-for-leaflet" {
 }
 
 declare module "georaster" {
-  export default function parseGeoRaster(input: any): Promise<any>;
+  export default function parseGeoRaster(
+    input: ArrayBuffer | Blob | string | unknown,
+  ): Promise<unknown>;
 }

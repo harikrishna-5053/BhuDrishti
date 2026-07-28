@@ -33,7 +33,9 @@ export default function MetadataPanel({
         <div className="grid grid-cols-2 gap-2 text-[11px]">
           <div className="rounded bg-[var(--surface-1)] p-1.5">
             <div className="text-[9px] uppercase text-muted-foreground">Dimensions</div>
-            <div className="text-foreground">{raster.width} × {raster.height} px</div>
+            <div className="text-foreground">
+              {raster.width} × {raster.height} px
+            </div>
           </div>
           <div className="rounded bg-[var(--surface-1)] p-1.5">
             <div className="text-[9px] uppercase text-muted-foreground">File Size</div>
@@ -48,7 +50,9 @@ export default function MetadataPanel({
             <div className="text-foreground">{raster.noDataValue ?? "-9999 (fallback)"}</div>
           </div>
           <div className="rounded bg-[var(--surface-1)] p-1.5 col-span-2">
-            <div className="text-[9px] uppercase text-muted-foreground">Geographic Bounds (EPSG:4326)</div>
+            <div className="text-[9px] uppercase text-muted-foreground">
+              Geographic Bounds (EPSG:4326)
+            </div>
             <div className="text-foreground text-[10px]">
               W: {raster.geoBounds.west.toFixed(4)}°, E: {raster.geoBounds.east.toFixed(4)}°<br />
               S: {raster.geoBounds.south.toFixed(4)}°, N: {raster.geoBounds.north.toFixed(4)}°
@@ -56,7 +60,9 @@ export default function MetadataPanel({
           </div>
           <div className="rounded bg-[var(--surface-1)] p-1.5">
             <div className="text-[9px] uppercase text-muted-foreground">Valid Pixels</div>
-            <div className="text-foreground">{raster.statistics.validPixelCount.toLocaleString()}</div>
+            <div className="text-foreground">
+              {raster.statistics.validPixelCount.toLocaleString()}
+            </div>
           </div>
           <div className="rounded bg-[var(--surface-1)] p-1.5">
             <div className="text-[9px] uppercase text-muted-foreground">Loaded At</div>
@@ -74,7 +80,9 @@ export default function MetadataPanel({
           <Database className="h-4 w-4 text-primary" />
           <span className="font-semibold">{tileId} Metadata</span>
         </div>
-        <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">S2B_MSIL2A</span>
+        <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">
+          S2B_MSIL2A
+        </span>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-[11px]">
@@ -84,7 +92,9 @@ export default function MetadataPanel({
         </div>
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <MapPin className="h-3.5 w-3.5" />
-          <span>{formatCoord(lat, "lat")}, {formatCoord(lng, "lng")}</span>
+          <span>
+            {formatCoord(lat, "lat")}, {formatCoord(lng, "lng")}
+          </span>
         </div>
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <Tag className="h-3.5 w-3.5" />

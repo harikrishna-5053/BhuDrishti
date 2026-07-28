@@ -39,7 +39,10 @@ export default function CropHealthGauge() {
     const nonVegPct = (nonVegCount / totalValid) * 100;
 
     // Overall agricultural health index score
-    const healthScore = Math.min(100, Math.round(densePct * 1.0 + modPct * 0.65 + stressPct * 0.25));
+    const healthScore = Math.min(
+      100,
+      Math.round(densePct * 1.0 + modPct * 0.65 + stressPct * 0.25),
+    );
 
     let status: { title: string; color: string; icon: typeof CheckCircle2; bg: string } = {
       title: "Flourishing / High Vigor",
@@ -100,7 +103,9 @@ export default function CropHealthGauge() {
       {/* Health Score Progress Bar */}
       <div>
         <div className="flex items-baseline justify-between mb-1">
-          <span className="text-[10px] font-bold uppercase text-muted-foreground">Agricultural Health Index</span>
+          <span className="text-[10px] font-bold uppercase text-muted-foreground">
+            Agricultural Health Index
+          </span>
           <span className="text-sm font-extrabold" style={{ color: healthData.status.color }}>
             {healthData.healthScore} / 100
           </span>
@@ -115,10 +120,26 @@ export default function CropHealthGauge() {
 
       {/* 4-class Distribution Breakdown Grid */}
       <div className="grid grid-cols-2 gap-2 text-[10px]">
-        <HealthMetric label="Healthy Crop (NDVI ≥ 0.6)" pct={healthData.densePct} color="oklch(0.55 0.17 150)" />
-        <HealthMetric label="Developing (0.3 - 0.6)" pct={healthData.modPct} color="oklch(0.6 0.15 140)" />
-        <HealthMetric label="Crop Stress (0.1 - 0.3)" pct={healthData.stressPct} color="oklch(0.6 0.14 90)" />
-        <HealthMetric label="Water / Bare Land (<0.1)" pct={healthData.nonVegPct} color="oklch(0.55 0.1 60)" />
+        <HealthMetric
+          label="Healthy Crop (NDVI ≥ 0.6)"
+          pct={healthData.densePct}
+          color="oklch(0.55 0.17 150)"
+        />
+        <HealthMetric
+          label="Developing (0.3 - 0.6)"
+          pct={healthData.modPct}
+          color="oklch(0.6 0.15 140)"
+        />
+        <HealthMetric
+          label="Crop Stress (0.1 - 0.3)"
+          pct={healthData.stressPct}
+          color="oklch(0.6 0.14 90)"
+        />
+        <HealthMetric
+          label="Water / Bare Land (<0.1)"
+          pct={healthData.nonVegPct}
+          color="oklch(0.55 0.1 60)"
+        />
       </div>
     </div>
   );

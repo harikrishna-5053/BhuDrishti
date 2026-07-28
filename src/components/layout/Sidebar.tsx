@@ -29,15 +29,35 @@ const LAYER_META: {
   swatch: string;
 }[] = [
   { key: "ndvi", label: "NDVI Raster", hint: "S2 L2A · 10 m", swatch: "var(--gradient-ndvi)" },
-  { key: "rgb", label: "RGB Satellite Imagery", hint: "Basemap · OSM", swatch: "linear-gradient(135deg,#3a4a6b,#7a8ba8)" },
+  {
+    key: "rgb",
+    label: "RGB Satellite Imagery",
+    hint: "Basemap · OSM",
+    swatch: "linear-gradient(135deg,#3a4a6b,#7a8ba8)",
+  },
   { key: "india", label: "India Boundary", hint: "Admin 0", swatch: "oklch(0.78 0.17 195)" },
   { key: "states", label: "State Boundaries", hint: "Admin 1", swatch: "oklch(0.75 0.13 90)" },
-  { key: "districts", label: "District Boundaries", hint: "Admin 2", swatch: "oklch(0.7 0.05 250)" },
-  { key: "custom", label: "Custom Analysis Layer", hint: "User AOI", swatch: "oklch(0.75 0.18 300)" },
+  {
+    key: "districts",
+    label: "District Boundaries",
+    hint: "Admin 2",
+    swatch: "oklch(0.7 0.05 250)",
+  },
+  {
+    key: "custom",
+    label: "Custom Analysis Layer",
+    hint: "User AOI",
+    swatch: "oklch(0.75 0.18 300)",
+  },
 ];
 
 const PIPELINE = [
-  { id: "preproc", label: "Sentinel-2 Preprocessing", icon: Satellite, hint: "Atmospheric · cloud mask" },
+  {
+    id: "preproc",
+    label: "Sentinel-2 Preprocessing",
+    icon: Satellite,
+    hint: "Atmospheric · cloud mask",
+  },
   { id: "ndvi", label: "NDVI Generation", icon: Leaf, hint: "(NIR − Red) / (NIR + Red)" },
   { id: "mosaic", label: "Periodic Mosaic", icon: Layers, hint: "Median composite" },
   { id: "export", label: "Export GeoTIFF", icon: Download, hint: "COG · EPSG:4326" },
@@ -78,10 +98,7 @@ export default function Sidebar({
 
       {open ? (
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-          <WorkspaceSection
-            onOpenUpload={onOpenUpload}
-            onOpenGeoTIFFUpload={onOpenGeoTIFFUpload}
-          />
+          <WorkspaceSection onOpenUpload={onOpenUpload} onOpenGeoTIFFUpload={onOpenGeoTIFFUpload} />
           <ProcessingSection onPushLog={onPushLog} />
           <LayerManagerSection
             layers={layers}
@@ -200,8 +217,7 @@ function ProcessingSection({ onPushLog }: { onPushLog: (l: LogLevel, m: string) 
     return () => clearInterval(t);
   }, [running, onPushLog]);
 
-  const labelFor = (id: string) =>
-    PIPELINE.find((p) => p.id === id)?.label ?? id;
+  const labelFor = (id: string) => PIPELINE.find((p) => p.id === id)?.label ?? id;
 
   const start = (id: string) => {
     onPushLog("INFO", `${labelFor(id)} started`);
@@ -235,9 +251,7 @@ function ProcessingSection({ onPushLog }: { onPushLog: (l: LogLevel, m: string) 
                   <Icon className="h-3.5 w-3.5 text-primary" />
                   <span className="truncate">{step.label}</span>
                 </div>
-                <div className="font-mono text-[10px] text-muted-foreground">
-                  {step.hint}
-                </div>
+                <div className="font-mono text-[10px] text-muted-foreground">{step.hint}</div>
                 {active && (
                   <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--surface-3)]">
                     <div
@@ -298,9 +312,12 @@ function LayerManagerSection({
 
   return (
     <section className="glass-panel rounded-xl p-3 flex-1 flex flex-col bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-      <SectionHeader icon={Layers} title="Layer Manager" count={`${order.length + (raster ? 1 : 0)} layers`} />
+      <SectionHeader
+        icon={Layers}
+        title="Layer Manager"
+        count={`${order.length + (raster ? 1 : 0)} layers`}
+      />
       <div className="space-y-1.5 overflow-y-auto flex-1 pr-1">
-
         {/* Dynamic Uploaded GeoTIFF Layer Entry */}
         {raster && (
           <div className="rounded-lg border border-emerald-500/60 bg-emerald-500/10 p-2 font-mono space-y-2 shadow-sm">
@@ -406,9 +423,7 @@ function LayerManagerSection({
                 <button
                   onClick={() => toggle(key)}
                   className={`grid h-6 w-6 place-items-center rounded transition cursor-pointer ${
-                    st.visible
-                      ? "text-primary"
-                      : "text-muted-foreground opacity-50"
+                    st.visible ? "text-primary" : "text-muted-foreground opacity-50"
                   }`}
                   title={st.visible ? "Hide layer" : "Show layer"}
                 >
@@ -423,12 +438,8 @@ function LayerManagerSection({
                   style={{ background: meta.swatch }}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-semibold text-foreground">
-                    {meta.label}
-                  </div>
-                  <div className="font-mono text-[9px] text-muted-foreground">
-                    {meta.hint}
-                  </div>
+                  <div className="truncate text-xs font-semibold text-foreground">{meta.label}</div>
+                  <div className="font-mono text-[9px] text-muted-foreground">{meta.hint}</div>
                 </div>
                 <div className="flex items-center gap-0.5">
                   <button
@@ -461,9 +472,7 @@ function LayerManagerSection({
                     max={1}
                     step={0.05}
                     value={st.opacity}
-                    onChange={(e) =>
-                      setOpacity(key, parseFloat(e.target.value))
-                    }
+                    onChange={(e) => setOpacity(key, parseFloat(e.target.value))}
                     className="h-1 flex-1 accent-primary cursor-pointer"
                   />
                   <span className="w-7 font-mono text-right text-[9px] text-muted-foreground font-semibold">

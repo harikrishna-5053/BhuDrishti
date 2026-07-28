@@ -1,11 +1,7 @@
 // Deterministic pseudo-NDVI generator and classification utilities
 
 export type VegClass =
-  | "Water"
-  | "Bare land"
-  | "Sparse vegetation"
-  | "Moderate vegetation"
-  | "Dense vegetation";
+  "Water" | "Bare land" | "Sparse vegetation" | "Moderate vegetation" | "Dense vegetation";
 
 export type ColorRampPreset = "ndvi" | "viridis" | "spectral" | "thermal";
 
@@ -25,12 +21,7 @@ function smoothNoise(x: number, y: number, seed = 0) {
   const br = hash(xi + 1, yi + 1, seed);
   const u = xf * xf * (3 - 2 * xf);
   const v = yf * yf * (3 - 2 * yf);
-  return (
-    tl * (1 - u) * (1 - v) +
-    tr * u * (1 - v) +
-    bl * (1 - u) * v +
-    br * u * v
-  );
+  return tl * (1 - u) * (1 - v) + tr * u * (1 - v) + bl * (1 - u) * v + br * u * v;
 }
 
 export function ndviAt(lat: number, lng: number, year = 2026): number {
@@ -57,7 +48,10 @@ export function classify(ndvi: number): VegClass {
   return "Dense vegetation";
 }
 
-function interpolateStops(ndvi: number, stops: { v: number; c: [number, number, number] }[]): string {
+function interpolateStops(
+  ndvi: number,
+  stops: { v: number; c: [number, number, number] }[],
+): string {
   for (let i = 0; i < stops.length - 1; i++) {
     const a = stops[i]!;
     const b = stops[i + 1]!;
@@ -133,11 +127,9 @@ export function localStats(lat: number, lng: number, year = 2026, radius = 0.4) 
   const max = samples[samples.length - 1]!;
   const mean = samples.reduce((s, v) => s + v, 0) / samples.length;
   const median = samples[Math.floor(samples.length / 2)]!;
-  const variance =
-    samples.reduce((s, v) => s + (v - mean) ** 2, 0) / samples.length;
+  const variance = samples.reduce((s, v) => s + (v - mean) ** 2, 0) / samples.length;
   const std = Math.sqrt(variance);
-  const vegPct =
-    (samples.filter((v) => v >= 0.4).length / samples.length) * 100;
+  const vegPct = (samples.filter((v) => v >= 0.4).length / samples.length) * 100;
 
   const bins = 12;
   const lo = -0.2;
@@ -147,10 +139,7 @@ export function localStats(lat: number, lng: number, year = 2026, radius = 0.4) 
     count: 0,
   }));
   for (const v of samples) {
-    const idx = Math.min(
-      bins - 1,
-      Math.max(0, Math.floor(((v - lo) / (hi - lo)) * bins)),
-    );
+    const idx = Math.min(bins - 1, Math.max(0, Math.floor(((v - lo) / (hi - lo)) * bins)));
     hist[idx]!.count++;
   }
 
@@ -159,12 +148,21 @@ export function localStats(lat: number, lng: number, year = 2026, radius = 0.4) 
 
 export function monthlyTimeline(lat: number, lng: number, year: number) {
   const months = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
   ];
   return months.map((m, i) => {
-    const seasonal =
-      0.18 * Math.sin(((i - 2) / 12) * Math.PI * 2) + 0.02 * (year - 2024);
+    const seasonal = 0.18 * Math.sin(((i - 2) / 12) * Math.PI * 2) + 0.02 * (year - 2024);
     const base = ndviAt(lat, lng, year);
     return {
       month: m,

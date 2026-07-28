@@ -6,11 +6,7 @@ export interface WorkspaceItem {
   cloud: number;
 }
 
-export type LogLevel =
-  | "INFO"
-  | "SUCCESS"
-  | "WARN"
-  | "ERROR";
+export type LogLevel = "INFO" | "SUCCESS" | "WARN" | "ERROR";
 
 export interface LogEntry {
   id: number;

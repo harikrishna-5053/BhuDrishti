@@ -98,13 +98,8 @@
     oklch(0.78 0.2 140) 75%,
     oklch(0.45 0.17 150) 100%
   );
-  --gradient-panel: linear-gradient(
-    180deg,
-    oklch(1 0 0 / 100%),
-    oklch(1 0 0 / 100%)
-  );
-  --shadow-glow: 0 0 0 1px oklch(0.84 0.015 250),
-    0 2px 8px rgba(0, 0, 0, 0.06);
+  --gradient-panel: linear-gradient(180deg, oklch(1 0 0 / 100%), oklch(1 0 0 / 100%));
+  --shadow-glow: 0 0 0 1px oklch(0.84 0.015 250), 0 2px 8px rgba(0, 0, 0, 0.06);
   --shadow-panel: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
@@ -155,8 +150,7 @@
     oklch(0.22 0.03 250 / 70%),
     oklch(0.16 0.024 250 / 60%)
   );
-  --shadow-glow: 0 0 0 1px oklch(0.72 0.16 195 / 25%),
-    0 8px 32px -8px oklch(0.72 0.16 195 / 20%);
+  --shadow-glow: 0 0 0 1px oklch(0.72 0.16 195 / 25%), 0 8px 32px -8px oklch(0.72 0.16 195 / 20%);
   --shadow-panel: 0 20px 60px -20px oklch(0 0 0 / 60%);
 }
 
@@ -169,7 +163,12 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family:
-      "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      "Inter",
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "ss01";
     -webkit-font-smoothing: antialiased;
   }
@@ -184,8 +183,7 @@
 @layer base {
   .font-mono {
     font-family:
-      "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
-      Consolas, monospace;
+      "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   }
 }
 
@@ -234,17 +232,45 @@
   filter: brightness(0.85) contrast(1.05) hue-rotate(180deg) invert(1);
 }
 
+/* Measurement Tool segment labels */
+.gis-measure-segment-label {
+  background: var(--surface-0) !important;
+  color: var(--color-foreground) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 4px !important;
+  padding: 1px 5px !important;
+  font-family: "JetBrains Mono", monospace !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15) !important;
+}
+.gis-measure-segment-label::before {
+  display: none !important;
+}
+
 @keyframes pulse-ring {
-  0% { transform: scale(0.6); opacity: 0.9; }
-  100% { transform: scale(2.4); opacity: 0; }
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
 }
 .pulse-ring {
   animation: pulse-ring 1.8s ease-out infinite;
 }
 
 @keyframes ticker {
-  from { transform: translateY(6px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 .animate-ticker {
   animation: ticker 0.25s ease-out;

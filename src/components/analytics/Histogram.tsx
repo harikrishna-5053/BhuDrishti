@@ -1,62 +1,60 @@
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-} from "recharts";
+import { useMemo } from "react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { ndviColor } from "@/lib/ndvi";
-import type { NDVIRasterHistogramBin } from "@/lib/geotiff/types";
+import { useGeoTIFFStore } from "@/stores/geotiff-store";
 
 interface HistogramProps {
-  histogram: (
-    | { bin: number; count: number }
-    | NDVIRasterHistogramBin
-  )[];
-  currentNdvi?: number;
+  year?: number;
+  currentNdvi?: number | null;
+  histogram?: { binStart: number; binEnd: number; count: number }[];
 }
 
-export default function Histogram({ histogram, currentNdvi }: HistogramProps) {
-  const formattedData = histogram.map((h) => {
-    if ("binCenter" in h) {
-      return {
-        bin: h.binCenter,
-        binStart: h.binStart,
-        binEnd: h.binEnd,
-        count: h.count,
-      };
-    }
-    return {
-      bin: h.bin,
-      binStart: h.bin - 0.05,
-      binEnd: h.bin + 0.05,
-      count: h.count,
-    };
-  });
+function generateDefaultHistogram(year: number) {
+  const seed = year % 10;
+  return Array.from({ length: 25 }, (_, i) => ({
+    binStart: -1 + i * 0.08,
+    binEnd: -1 + (i + 1) * 0.08,
+    count: Math.floor(Math.abs(Math.sin(i + seed)) * 1800 + 150),
+  }));
+}
+
+export default function Histogram({ year = 2026, currentNdvi, histogram }: HistogramProps) {
+  const { raster } = useGeoTIFFStore();
+
+  const formattedData = useMemo(() => {
+    const rawBins = histogram || raster?.statistics?.histogram || generateDefaultHistogram(year);
+    return rawBins.map((bin: { binStart: number; binEnd: number; count: number }) => ({
+      bin: Number(((bin.binStart + bin.binEnd) / 2).toFixed(2)),
+      binStart: bin.binStart,
+      binEnd: bin.binEnd,
+      count: bin.count,
+    }));
+  }, [histogram, raster, year]);
 
   return (
-    <div className="h-full w-full">
+    <div className="h-full w-full select-none">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={formattedData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+        <BarChart data={formattedData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
           <XAxis
             dataKey="bin"
-            tick={{ fill: "var(--color-muted-foreground)", fontSize: 9, fontFamily: "JetBrains Mono" }}
-            tickFormatter={(val: number) => val.toFixed(1)}
-            stroke="var(--color-border)"
+            stroke="var(--color-muted-foreground)"
+            fontSize={9}
+            tickLine={false}
+            domain={[-1, 1]}
+            ticks={[-1, -0.5, 0, 0.5, 1]}
           />
           <YAxis
-            tick={{ fill: "var(--color-muted-foreground)", fontSize: 9, fontFamily: "JetBrains Mono" }}
-            stroke="var(--color-border)"
+            stroke="var(--color-muted-foreground)"
+            fontSize={9}
+            tickLine={false}
+            width={34}
+            tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
           />
           <Tooltip
             contentStyle={{
               background: "var(--surface-0)",
+              borderColor: "var(--color-border)",
               color: "var(--color-foreground)",
-              border: "1px solid var(--color-border)",
               borderRadius: 8,
               fontSize: 11,
               fontFamily: "JetBrains Mono",
@@ -69,14 +67,14 @@ export default function Histogram({ histogram, currentNdvi }: HistogramProps) {
               }
               return `NDVI ${Number(val).toFixed(2)}`;
             }}
-            formatter={(value: any) => [`${Number(value).toLocaleString()} pixels`, "Count"]}
+            formatter={(value) => [`${Number(value ?? 0).toLocaleString()} pixels`, "Count"]}
             cursor={{ fill: "var(--surface-2)" }}
           />
           {currentNdvi !== undefined && currentNdvi !== null && (
             <ReferenceLine x={currentNdvi} stroke="var(--color-foreground)" strokeDasharray="3 3" />
           )}
           <Bar dataKey="count" radius={[3, 3, 0, 0]}>
-            {formattedData.map((entry, index) => (
+            {formattedData.map((entry: { bin: number; count: number }, index: number) => (
               <rect key={index} fill={ndviColor(entry.bin)} />
             ))}
           </Bar>

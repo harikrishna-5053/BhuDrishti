@@ -1,5 +1,13 @@
 import { useMemo } from "react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import { TrendingUp, Activity } from "lucide-react";
 
 interface FieldTransectProfileProps {
@@ -26,8 +34,10 @@ export default function FieldTransectProfile({ points, sampleValues }: FieldTran
         const lat = p1[0] + (p2[0] - p1[0]) * t;
         const lng = p1[1] + (p2[1] - p1[1]) * t;
 
-        const dist = totalDist + (t * 2.4); // approx dist step
-        const ndvi = Number((0.2 + 0.5 * Math.sin(t * Math.PI * 3) + Math.random() * 0.1).toFixed(3));
+        const dist = totalDist + t * 2.4; // approx dist step
+        const ndvi = Number(
+          (0.2 + 0.5 * Math.sin(t * Math.PI * 3) + Math.random() * 0.1).toFixed(3),
+        );
         samples.push({ distanceKm: Number(dist.toFixed(2)), ndvi });
       }
       totalDist += 2.4;
@@ -40,7 +50,9 @@ export default function FieldTransectProfile({ points, sampleValues }: FieldTran
     return (
       <div className="glass-panel rounded-xl p-3 font-mono text-xs flex items-center justify-center text-muted-foreground gap-2 h-36">
         <Activity className="h-4 w-4 text-primary animate-pulse" />
-        <span>Click 2 or more points on the map to sample an NDVI field transect cross-section</span>
+        <span>
+          Click 2 or more points on the map to sample an NDVI field transect cross-section
+        </span>
       </div>
     );
   }
@@ -59,8 +71,16 @@ export default function FieldTransectProfile({ points, sampleValues }: FieldTran
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 4, right: 8, left: -25, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 6%)" />
-            <XAxis dataKey="distanceKm" tick={{ fill: "var(--color-muted-foreground)", fontSize: 9 }} stroke="oklch(1 0 0 / 15%)" />
-            <YAxis domain={[-0.1, 1.0]} tick={{ fill: "var(--color-muted-foreground)", fontSize: 9 }} stroke="oklch(1 0 0 / 15%)" />
+            <XAxis
+              dataKey="distanceKm"
+              tick={{ fill: "var(--color-muted-foreground)", fontSize: 9 }}
+              stroke="oklch(1 0 0 / 15%)"
+            />
+            <YAxis
+              domain={[-0.1, 1.0]}
+              tick={{ fill: "var(--color-muted-foreground)", fontSize: 9 }}
+              stroke="oklch(1 0 0 / 15%)"
+            />
             <Tooltip
               contentStyle={{
                 background: "var(--surface-2)",
@@ -69,7 +89,13 @@ export default function FieldTransectProfile({ points, sampleValues }: FieldTran
                 fontSize: 11,
               }}
             />
-            <Line type="monotone" dataKey="ndvi" stroke="var(--success)" strokeWidth={2} dot={{ r: 2 }} />
+            <Line
+              type="monotone"
+              dataKey="ndvi"
+              stroke="var(--success)"
+              strokeWidth={2}
+              dot={{ r: 2 }}
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>

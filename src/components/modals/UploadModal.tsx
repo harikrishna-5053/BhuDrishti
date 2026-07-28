@@ -19,7 +19,11 @@ export default function UploadModal({ open, onClose, onPushLog }: UploadModalPro
   const validateAndSetFile = (f: File) => {
     setErrorMessage(null);
     const ext = f.name.split(".").pop()?.toLowerCase();
-    if (ext !== "zip" && f.type !== "application/zip" && f.type !== "application/x-zip-compressed") {
+    if (
+      ext !== "zip" &&
+      f.type !== "application/zip" &&
+      f.type !== "application/x-zip-compressed"
+    ) {
       setErrorMessage("Please select a valid Sentinel-2 ZIP file.");
       setFile(null);
       return;
@@ -78,7 +82,9 @@ export default function UploadModal({ open, onClose, onPushLog }: UploadModalPro
             </div>
             <div>
               <h3 className="text-sm font-bold text-foreground">Upload Sentinel-2 Dataset</h3>
-              <p className="text-[11px] font-medium text-muted-foreground">Support for Sentinel-2 Level-2A ZIP files</p>
+              <p className="text-[11px] font-medium text-muted-foreground">
+                Support for Sentinel-2 Level-2A ZIP files
+              </p>
             </div>
           </div>
           <button

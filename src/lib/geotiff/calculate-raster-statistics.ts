@@ -8,7 +8,7 @@ const MAX_NDVI = 1.0;
 export function calculateNDVIRasterStatistics(
   values: Float32Array,
   noDataValue: number | null,
-  vegThreshold = 0.20
+  vegThreshold = 0.2,
 ): NDVIRasterStatistics {
   const totalPixels = values.length;
   const isSampled = totalPixels > LARGE_RASTER_PIXEL_THRESHOLD;
@@ -54,7 +54,7 @@ export function calculateNDVIRasterStatistics(
     // Bin index computation
     const binIdx = Math.min(
       HISTOGRAM_BIN_COUNT - 1,
-      Math.max(0, Math.floor((val - MIN_NDVI) / binWidth))
+      Math.max(0, Math.floor((val - MIN_NDVI) / binWidth)),
     );
     histogramCounts[binIdx]!++;
   }
@@ -66,16 +66,15 @@ export function calculateNDVIRasterStatistics(
       maximum: 0,
       mean: 0,
       median: 0,
+      stdDev: 0,
       standardDeviation: 0,
       validPixelCount: 0,
       noDataPixelCount: totalPixels,
-      vegetationPixelCount: 0,
       vegetationPercentage: 0,
       isSampled,
       histogram: Array.from({ length: HISTOGRAM_BIN_COUNT }, (_, i) => ({
         binStart: MIN_NDVI + i * binWidth,
         binEnd: MIN_NDVI + (i + 1) * binWidth,
-        binCenter: MIN_NDVI + (i + 0.5) * binWidth,
         count: 0,
       })),
     };
@@ -113,7 +112,6 @@ export function calculateNDVIRasterStatistics(
     histogram.push({
       binStart: start,
       binEnd: end,
-      binCenter: start + binWidth / 2,
       count: histogramCounts[i]!,
     });
   }
@@ -125,10 +123,10 @@ export function calculateNDVIRasterStatistics(
     maximum: Number(max.toFixed(4)),
     mean: Number(mean.toFixed(4)),
     median: Number(median.toFixed(4)),
+    stdDev: Number(standardDeviation.toFixed(4)),
     standardDeviation: Number(standardDeviation.toFixed(4)),
     validPixelCount: isSampled ? validCount * stride : validCount,
     noDataPixelCount: isSampled ? noDataCount * stride : noDataCount,
-    vegetationPixelCount: isSampled ? vegCount * stride : vegCount,
     vegetationPercentage: Number(vegPercentage.toFixed(1)),
     isSampled,
     histogram,

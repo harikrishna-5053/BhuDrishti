@@ -22,7 +22,9 @@ export default function AOIStatsModal({ open, onClose, stats, rasterName }: AOIS
             </div>
             <div>
               <h3 className="text-sm font-bold text-foreground">AOI Field Polygon Analysis</h3>
-              <p className="text-[10px] font-medium text-muted-foreground">Geodesic Area & Clipped Raster Metrics</p>
+              <p className="text-[10px] font-medium text-muted-foreground">
+                Geodesic Area & Clipped Raster Metrics
+              </p>
             </div>
           </div>
           <button
@@ -39,21 +41,33 @@ export default function AOIStatsModal({ open, onClose, stats, rasterName }: AOIS
           <div className="rounded-xl border border-border bg-[var(--surface-1)] p-3 flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-2">
               <Layers className="h-4 w-4 text-primary shrink-0" />
-              <span className="truncate max-w-[200px] text-foreground font-bold">{rasterName || "Active Raster Layer"}</span>
+              <span className="truncate max-w-[200px] text-foreground font-bold">
+                {rasterName || "Active Raster Layer"}
+              </span>
             </div>
-            <span className="text-[10px] text-muted-foreground font-semibold">{stats.pixelCount.toLocaleString()} pixels sampled</span>
+            <span className="text-[10px] text-muted-foreground font-semibold">
+              {stats.pixelCount.toLocaleString()} pixels sampled
+            </span>
           </div>
 
           {/* Area Metrics Card */}
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-primary/40 bg-primary/10 p-3">
-              <div className="text-[10px] uppercase font-bold text-muted-foreground">AOI Field Area</div>
+              <div className="text-[10px] uppercase font-bold text-muted-foreground">
+                AOI Field Area
+              </div>
               <div className="text-xl font-bold text-primary">{stats.areaHectares} ha</div>
-              <div className="text-[10px] text-muted-foreground font-semibold">({stats.areaAcres} Acres)</div>
+              <div className="text-[10px] text-muted-foreground font-semibold">
+                ({stats.areaAcres} Acres)
+              </div>
             </div>
             <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
-              <div className="text-[10px] uppercase font-bold text-muted-foreground">Vegetation Coverage</div>
-              <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{stats.vegetationPercentage}%</div>
+              <div className="text-[10px] uppercase font-bold text-muted-foreground">
+                Vegetation Coverage
+              </div>
+              <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                {stats.vegetationPercentage}%
+              </div>
               <div className="text-[10px] text-muted-foreground font-semibold">(NDVI ≥ 0.4)</div>
             </div>
           </div>
@@ -70,7 +84,8 @@ export default function AOIStatsModal({ open, onClose, stats, rasterName }: AOIS
           <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 flex items-center gap-2.5 text-emerald-700 dark:text-emerald-300 font-medium">
             <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span className="text-[11px] leading-relaxed">
-              Target polygon area successfully extracted. All metrics are calculated strictly inside the drawn field boundary.
+              Target polygon area successfully extracted. All metrics are calculated strictly inside
+              the drawn field boundary.
             </span>
           </div>
         </div>

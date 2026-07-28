@@ -17,26 +17,15 @@ export function MapLoading() {
   );
 }
 
-export default function MapOverlays({
-  cursor,
-  year,
-}: {
-  cursor: CursorState;
-  year: number;
-}) {
-  const scaleKm = Math.max(
-    1,
-    Math.round(20000 / Math.pow(2, cursor.zoom)),
-  );
+export default function MapOverlays({ cursor, year }: { cursor: CursorState; year: number }) {
+  const scaleKm = Math.max(1, Math.round(20000 / Math.pow(2, cursor.zoom)));
 
   return (
     <>
       <div className="pointer-events-none absolute left-4 top-4 z-[500] grid h-14 w-14 place-items-center rounded-full border border-border bg-[var(--surface-0)] shadow-[0_2px_8px_rgba(0,0,0,0.06)] backdrop-blur">
         <div className="relative flex h-full w-full items-center justify-center">
           <Compass className="h-7 w-7 text-primary" />
-          <span className="absolute top-1 font-mono text-[9px] font-bold text-primary">
-            N
-          </span>
+          <span className="absolute top-1 font-mono text-[9px] font-bold text-primary">N</span>
         </div>
       </div>
 

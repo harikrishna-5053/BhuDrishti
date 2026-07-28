@@ -14,7 +14,7 @@ interface NDVIGeoTIFFLayerProps {
 
 export default function NDVIGeoTIFFLayer({ raster, opacity, visible }: NDVIGeoTIFFLayerProps) {
   const map = useMap();
-  const layerRef = useRef<any>(null);
+  const layerRef = useRef<L.Layer | null>(null);
   const { zoomTrigger, colorRamp } = useGeoTIFFStore();
 
   useEffect(() => {
@@ -56,7 +56,7 @@ export default function NDVIGeoTIFFLayer({ raster, opacity, visible }: NDVIGeoTI
       });
 
       geoLayer.addTo(map);
-      layerRef.current = geoLayer;
+      layerRef.current = geoLayer as unknown as L.Layer;
     } catch (err) {
       console.error("Failed to render GeoRasterLayer on Leaflet map:", err);
     }
@@ -67,7 +67,7 @@ export default function NDVIGeoTIFFLayer({ raster, opacity, visible }: NDVIGeoTI
         layerRef.current = null;
       }
     };
-  }, [map, raster, visible, colorRamp]);
+  }, [map, raster, opacity, visible, colorRamp]);
 
   // Handle explicit Zoom-to-Raster triggers
   useEffect(() => {
@@ -76,18 +76,9 @@ export default function NDVIGeoTIFFLayer({ raster, opacity, visible }: NDVIGeoTI
         [raster.geoBounds.south, raster.geoBounds.west],
         [raster.geoBounds.north, raster.geoBounds.east],
       ];
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+      map.fitBounds(bounds, { padding: [30, 30], maxZoom: 13, animate: true });
     }
-  }, [map, zoomTrigger, raster, visible]);
-
-  // Update opacity dynamically without re-creating layer
-  useEffect(() => {
-    if (layerRef.current && visible) {
-      if (typeof layerRef.current.setOpacity === "function") {
-        layerRef.current.setOpacity(opacity);
-      }
-    }
-  }, [opacity, visible]);
+  }, [zoomTrigger, raster, visible, map]);
 
   return null;
 }

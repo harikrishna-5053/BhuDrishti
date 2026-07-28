@@ -19,7 +19,9 @@ export default function ResultDetailsModal({ open, onClose, resultName }: Result
               <Gauge className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-foreground">Granule & Spectral Statistics</h3>
+              <h3 className="text-sm font-semibold text-foreground">
+                Granule & Spectral Statistics
+              </h3>
               <p className="text-[11px] text-muted-foreground">{resultName}</p>
             </div>
           </div>
@@ -53,7 +55,9 @@ export default function ResultDetailsModal({ open, onClose, resultName }: Result
           </div>
 
           <div>
-            <div className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Band Reflectance Means</div>
+            <div className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+              Band Reflectance Means
+            </div>
             <div className="space-y-1.5">
               {[
                 { band: "B2 (Blue 490nm)", val: "0.084", color: "oklch(0.6 0.15 240)" },
@@ -62,7 +66,10 @@ export default function ResultDetailsModal({ open, onClose, resultName }: Result
                 { band: "B8 (NIR 842nm)", val: "0.384", color: "oklch(0.5 0.2 150)" },
                 { band: "B11 (SWIR 1610nm)", val: "0.210", color: "oklch(0.7 0.1 60)" },
               ].map((b) => (
-                <div key={b.band} className="flex items-center justify-between rounded-md bg-[var(--surface-1)] px-3 py-1.5">
+                <div
+                  key={b.band}
+                  className="flex items-center justify-between rounded-md bg-[var(--surface-1)] px-3 py-1.5"
+                >
                   <span className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full" style={{ background: b.color }} />
                     <span className="text-[11px]">{b.band}</span>

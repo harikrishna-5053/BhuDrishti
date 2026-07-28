@@ -11,7 +11,13 @@ interface SettingsModalProps {
   onSetTheme?: (theme: Theme) => void;
 }
 
-export default function SettingsModal({ open, onClose, onPushLog, theme = "dark", onSetTheme }: SettingsModalProps) {
+export default function SettingsModal({
+  open,
+  onClose,
+  onPushLog,
+  theme = "dark",
+  onSetTheme,
+}: SettingsModalProps) {
   const [crs, setCrs] = useState("EPSG:4326");
   const [unit, setUnit] = useState("metric");
   const [palette, setPalette] = useState("standard");
@@ -35,7 +41,9 @@ export default function SettingsModal({ open, onClose, onPushLog, theme = "dark"
             </div>
             <div>
               <h3 className="text-sm font-semibold text-foreground">Console Settings</h3>
-              <p className="text-[11px] text-muted-foreground">Configure map projection & theme preferences</p>
+              <p className="text-[11px] text-muted-foreground">
+                Configure map projection & theme preferences
+              </p>
             </div>
           </div>
           <button
@@ -50,7 +58,9 @@ export default function SettingsModal({ open, onClose, onPushLog, theme = "dark"
         <div className="p-5 space-y-4 text-xs">
           {/* Theme Option */}
           <div>
-            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">Application Theme Mode</label>
+            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">
+              Application Theme Mode
+            </label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => onSetTheme && onSetTheme("dark")}
@@ -81,7 +91,9 @@ export default function SettingsModal({ open, onClose, onPushLog, theme = "dark"
 
           {/* CRS Setting */}
           <div>
-            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">Coordinate Reference System</label>
+            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">
+              Coordinate Reference System
+            </label>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { id: "EPSG:4326", label: "WGS 84 (EPSG:4326)" },
@@ -105,7 +117,9 @@ export default function SettingsModal({ open, onClose, onPushLog, theme = "dark"
 
           {/* Unit Measurement */}
           <div>
-            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">Measurement Units</label>
+            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">
+              Measurement Units
+            </label>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { id: "metric", label: "Metric (km, ha, m²)" },
@@ -129,7 +143,9 @@ export default function SettingsModal({ open, onClose, onPushLog, theme = "dark"
 
           {/* Base Map Tile Server */}
           <div>
-            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">Basemap Provider</label>
+            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">
+              Basemap Provider
+            </label>
             <select
               value={tileServer}
               onChange={(e) => setTileServer(e.target.value)}
