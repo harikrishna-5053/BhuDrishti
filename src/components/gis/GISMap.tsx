@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { ndviAt, ndviColor, classify } from "@/lib/ndvi";
 import NDVIGeoTIFFLayer from "./NDVIGeoTIFFLayer";
+import GeoJSONBoundaryLayer from "./GeoJSONBoundaryLayer";
 import { useGeoTIFFStore } from "@/stores/geotiff-store";
 import {
   distanceMeters,
@@ -40,6 +41,10 @@ const INDIA_BOUNDS: L.LatLngBoundsLiteral = [
   [6.5, 68],
   [37.5, 97.5],
 ];
+
+const INDIA_STYLE: L.PathOptions = { color: "#0284c7", weight: 2 };
+const STATE_STYLE: L.PathOptions = { color: "#475569", weight: 1.2, dashArray: "4 4" };
+const DISTRICT_STYLE: L.PathOptions = { color: "#94a3b8", weight: 0.6 };
 
 function CoordDisplay({ onMove }: { onMove: (lat: number, lng: number, zoom: number) => void }) {
   useMapEvents({
@@ -601,50 +606,6 @@ export default function GISMap({
     handleAOIUndo,
   ]);
 
-  const indiaOutline = useMemo<L.LatLngExpression[][]>(
-    () => [
-      [
-        [37.5, 76.5],
-        [35.5, 78],
-        [34, 79.5],
-        [33, 78.5],
-        [32.5, 79.5],
-        [30.5, 81],
-        [28.5, 84],
-        [27.5, 88],
-        [27, 89],
-        [27.5, 92],
-        [28, 95],
-        [27, 97],
-        [24, 95],
-        [23, 93.5],
-        [22.5, 92.5],
-        [22, 91],
-        [21.5, 89],
-        [22, 88.5],
-        [20, 87],
-        [17, 82.5],
-        [13, 80.5],
-        [8, 77.5],
-        [8.5, 76.5],
-        [11.5, 75],
-        [15, 74],
-        [19, 72.5],
-        [22, 69],
-        [23.5, 68.5],
-        [24, 68],
-        [26, 70],
-        [28, 70.5],
-        [30, 74],
-        [32, 74.5],
-        [34, 74],
-        [35, 75.5],
-        [37.5, 76.5],
-      ] as L.LatLngExpression[],
-    ],
-    [],
-  );
-
   return (
     <div
       className="relative h-full w-full select-none"
@@ -686,18 +647,29 @@ export default function GISMap({
 
         {raster && <NDVIGeoTIFFLayer raster={raster} opacity={geoOpacity} visible={geoVisible} />}
 
-        {layers.india.visible && (
-          <BoundaryLayer
-            rings={indiaOutline}
-            color="oklch(0.78 0.17 195)"
-            weight={2}
-            opacity={layers.india.opacity}
-            dash={null}
-          />
-        )}
+        <GeoJSONBoundaryLayer
+          url="/data/boundaries/india-outline.geojson"
+          layerName="India Boundary"
+          visible={layers.india.visible}
+          opacity={layers.india.opacity}
+          style={INDIA_STYLE}
+        />
 
-        {layers.states.visible && <StateGrid opacity={layers.states.opacity} />}
-        {layers.districts.visible && <DistrictGrid opacity={layers.districts.opacity} />}
+        <GeoJSONBoundaryLayer
+          url="/data/boundaries/india-states.geojson"
+          layerName="State Boundaries"
+          visible={layers.states.visible}
+          opacity={layers.states.opacity}
+          style={STATE_STYLE}
+        />
+
+        <GeoJSONBoundaryLayer
+          url="/data/boundaries/india-districts.geojson"
+          layerName="District Boundaries"
+          visible={layers.districts.visible}
+          opacity={layers.districts.opacity}
+          style={DISTRICT_STYLE}
+        />
 
         <ZoomCtl />
         <CoordDisplay onMove={onCursor} />
@@ -1108,123 +1080,5 @@ function ZoomCtl() {
       c.remove();
     };
   }, [map]);
-  return null;
-}
-
-function BoundaryLayer({
-  rings,
-  color,
-  weight,
-  opacity,
-  dash,
-}: {
-  rings: L.LatLngExpression[][];
-  color: string;
-  weight: number;
-  opacity: number;
-  dash: string | null;
-}) {
-  const map = useMap();
-  useEffect(() => {
-    const layer = L.polygon(rings, {
-      color,
-      weight,
-      opacity,
-      fill: false,
-      dashArray: dash ?? undefined,
-      interactive: false,
-    }).addTo(map);
-    return () => {
-      layer.remove();
-    };
-  }, [map, rings, color, weight, opacity, dash]);
-  return null;
-}
-
-function StateGrid({ opacity }: { opacity: number }) {
-  const map = useMap();
-  useEffect(() => {
-    const lines: L.Polyline[] = [];
-    for (let lat = 10; lat <= 34; lat += 4) {
-      lines.push(
-        L.polyline(
-          [
-            [lat, 69],
-            [lat, 96],
-          ],
-          {
-            color: "oklch(0.75 0.13 90 / 70%)",
-            weight: 1,
-            opacity,
-            dashArray: "4 4",
-            interactive: false,
-          },
-        ).addTo(map),
-      );
-    }
-    for (let lng = 72; lng <= 94; lng += 4) {
-      lines.push(
-        L.polyline(
-          [
-            [7, lng],
-            [36, lng],
-          ],
-          {
-            color: "oklch(0.75 0.13 90 / 70%)",
-            weight: 1,
-            opacity,
-            dashArray: "4 4",
-            interactive: false,
-          },
-        ).addTo(map),
-      );
-    }
-    return () => {
-      lines.forEach((l) => l.remove());
-    };
-  }, [map, opacity]);
-  return null;
-}
-
-function DistrictGrid({ opacity }: { opacity: number }) {
-  const map = useMap();
-  useEffect(() => {
-    const lines: L.Polyline[] = [];
-    for (let lat = 8; lat <= 36; lat += 1.5) {
-      lines.push(
-        L.polyline(
-          [
-            [lat, 69],
-            [lat, 96],
-          ],
-          {
-            color: "oklch(0.7 0.05 250 / 40%)",
-            weight: 0.5,
-            opacity,
-            interactive: false,
-          },
-        ).addTo(map),
-      );
-    }
-    for (let lng = 70; lng <= 96; lng += 1.5) {
-      lines.push(
-        L.polyline(
-          [
-            [7, lng],
-            [36, lng],
-          ],
-          {
-            color: "oklch(0.7 0.05 250 / 40%)",
-            weight: 0.5,
-            opacity,
-            interactive: false,
-          },
-        ).addTo(map),
-      );
-    }
-    return () => {
-      lines.forEach((l) => l.remove());
-    };
-  }, [map, opacity]);
   return null;
 }

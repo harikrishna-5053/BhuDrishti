@@ -15,6 +15,10 @@ interface FieldTransectProfileProps {
   sampleValues?: { distanceKm: number; ndvi: number }[];
 }
 
+/*
+ * TODO: Reserved component for multi-temporal line transect profile visualization.
+ * Keep unmounted in production path until backend transect sampling pipeline is connected.
+ */
 export default function FieldTransectProfile({ points, sampleValues }: FieldTransectProfileProps) {
   const chartData = useMemo(() => {
     if (sampleValues && sampleValues.length > 0) return sampleValues;

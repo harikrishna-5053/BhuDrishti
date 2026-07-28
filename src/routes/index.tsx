@@ -108,10 +108,31 @@ function Dashboard() {
     if (raster) {
       setBottomPaneExpanded(true);
       setBottomTab("metadata");
+      setAoiStatsResult(null);
     } else {
       setBottomPaneExpanded(false);
+      setClicked(null);
+      setAoiStatsResult(null);
+      setSwipeMode(false);
     }
   }, [raster]);
+
+  // Reactive state-driven effect for committed selectedPixel changes
+  useEffect(() => {
+    if (
+      !selectedPixel ||
+      selectedPixel.value === null ||
+      selectedPixel.value === undefined ||
+      selectedPixel.isNoData
+    ) {
+      return;
+    }
+
+    pushLog(
+      "INFO",
+      `Real GeoTIFF Point analysis: ${selectedPixel.lat.toFixed(4)}°, ${selectedPixel.lng.toFixed(4)}° · Row=${selectedPixel.row}, Col=${selectedPixel.col} · NDVI=${selectedPixel.value.toFixed(3)}`,
+    );
+  }, [selectedPixel]);
 
   const [logs, setLogs] = useState<LogEntry[]>([
     {
@@ -162,12 +183,6 @@ function Dashboard() {
   const handleClick = (lat: number, lng: number) => {
     setClicked({ lat, lng });
     setBottomPaneExpanded(false);
-    if (selectedPixel && selectedPixel.value !== null) {
-      pushLog(
-        "INFO",
-        `Real GeoTIFF Point analysis: ${lat.toFixed(4)}°, ${lng.toFixed(4)}° · Row=${selectedPixel.row}, Col=${selectedPixel.col} · NDVI=${selectedPixel.value.toFixed(3)}`,
-      );
-    }
   };
 
   const handleOutsideClick = () => {

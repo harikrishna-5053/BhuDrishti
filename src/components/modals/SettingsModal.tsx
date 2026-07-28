@@ -73,20 +73,23 @@ export default function SettingsModal({
                   {
                     key: "india" as const,
                     label: "India Boundary",
-                    hint: "Admin 0 · Country",
-                    swatch: "oklch(0.78 0.17 195)",
+                    hint: "Admin 0 · Country Outline",
+                    swatch: "#0284c7",
+                    status: "Installed",
                   },
                   {
                     key: "states" as const,
                     label: "State Boundaries",
                     hint: "Admin 1 · States & UTs",
-                    swatch: "oklch(0.75 0.13 90)",
+                    swatch: "#475569",
+                    status: "Installed",
                   },
                   {
                     key: "districts" as const,
                     label: "District Boundaries",
                     hint: "Admin 2 · Districts",
-                    swatch: "oklch(0.7 0.05 250)",
+                    swatch: "#94a3b8",
+                    status: "Dataset not installed",
                   },
                 ].map((b) => {
                   const layer = layers[b.key];
@@ -119,8 +122,19 @@ export default function SettingsModal({
                           style={{ background: b.swatch }}
                         />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-xs font-semibold text-foreground">
-                            {b.label}
+                          <div className="flex items-center justify-between">
+                            <span className="truncate text-xs font-semibold text-foreground">
+                              {b.label}
+                            </span>
+                            <span
+                              className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] font-bold ${
+                                b.status === "Installed"
+                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                                  : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                              }`}
+                            >
+                              {b.status}
+                            </span>
                           </div>
                           <div className="font-mono text-[9px] text-muted-foreground">{b.hint}</div>
                         </div>
@@ -153,6 +167,14 @@ export default function SettingsModal({
                     </div>
                   );
                 })}
+
+                <div className="mt-2 rounded-lg bg-[var(--surface-0)] p-2.5 border border-border/60 text-[10px] text-muted-foreground">
+                  <div className="font-bold text-foreground mb-0.5">
+                    Data Attribution & Boundary Notice
+                  </div>
+                  Administrative boundary geometry is loaded lazily from local GeoJSON assets under
+                  Open Data Commons (ODbL) standards for offline GIS operation.
+                </div>
               </div>
             </div>
           )}

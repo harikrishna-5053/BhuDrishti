@@ -124,19 +124,26 @@ export default function ExportGeoTIFFModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3 bg-[var(--surface-1)]">
-          <button
-            onClick={onClose}
-            className="rounded-md border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground transition cursor-pointer"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleExport}
-            className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow-md hover:bg-primary/90 transition cursor-pointer"
-          >
-            Download File
-          </button>
+        <div className="flex items-center justify-between border-t border-border px-5 py-3 bg-[var(--surface-1)]">
+          <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/30">
+            Backend Export Engine Required
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="rounded-md border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground transition cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              disabled
+              onClick={handleExport}
+              title="GeoTIFF dataset export will connect to backend processing engine"
+              className="rounded-md bg-primary/50 text-primary-foreground/70 px-4 py-2 text-xs font-bold shadow-md cursor-not-allowed"
+            >
+              Download File
+            </button>
+          </div>
         </div>
       </div>
     </div>

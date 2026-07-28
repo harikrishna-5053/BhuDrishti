@@ -13,6 +13,10 @@ interface TimeSeriesProps {
   years: number[];
 }
 
+/*
+ * TODO: Reserved component for multi-year temporal trend visualizations.
+ * Keep unmounted in production path until multi-temporal Sentinel-2 pipeline is connected.
+ */
 export default function TimeSeries({ data, years }: TimeSeriesProps) {
   return (
     <div className="h-full w-full">
