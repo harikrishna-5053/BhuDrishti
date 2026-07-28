@@ -5,15 +5,17 @@ import {
   Eye,
   EyeOff,
   FolderOpen,
+  FolderKanban,
   Layers,
   Leaf,
   Play,
   Satellite,
-  Upload,
   FileImage,
   Trash2,
   Maximize2,
   Palette,
+  X,
+  Loader2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
@@ -34,14 +36,6 @@ const LAYER_META: {
     label: "RGB Satellite Imagery",
     hint: "Basemap · OSM",
     swatch: "linear-gradient(135deg,#3a4a6b,#7a8ba8)",
-  },
-  { key: "india", label: "India Boundary", hint: "Admin 0", swatch: "oklch(0.78 0.17 195)" },
-  { key: "states", label: "State Boundaries", hint: "Admin 1", swatch: "oklch(0.75 0.13 90)" },
-  {
-    key: "districts",
-    label: "District Boundaries",
-    hint: "Admin 2",
-    swatch: "oklch(0.7 0.05 250)",
   },
   {
     key: "custom",
@@ -69,7 +63,6 @@ export default function Sidebar({
   layers,
   setLayers,
   onPushLog,
-  onOpenUpload,
   onOpenGeoTIFFUpload,
   onRemoveGeoTIFF,
 }: {
@@ -78,57 +71,188 @@ export default function Sidebar({
   layers: LayerState;
   setLayers: Dispatch<SetStateAction<LayerState>>;
   onPushLog: (level: LogLevel, msg: string) => void;
-  onOpenUpload: () => void;
+  onOpenUpload?: () => void;
   onOpenGeoTIFFUpload?: () => void;
   onRemoveGeoTIFF?: () => void;
 }) {
-  return (
-    <aside
-      className={`relative flex shrink-0 flex-col border-r border-border bg-[var(--surface-0)] transition-[width] duration-300 ease-out shadow-[0_2px_8px_rgba(0,0,0,0.06)] z-10 ${
-        open ? "w-[340px]" : "w-14"
-      }`}
-    >
-      <button
-        onClick={onToggle}
-        className="absolute -right-3 top-6 z-10 grid h-6 w-6 place-items-center rounded-full border border-border bg-[var(--surface-0)] text-muted-foreground shadow-md hover:text-primary transition cursor-pointer"
-        title={open ? "Collapse sidebar" : "Expand sidebar"}
-      >
-        {open ? <ChevronLeft className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-      </button>
+  const [isPathPanelOpen, setIsPathPanelOpen] = useState(false);
+  const [inputPath, setInputPath] = useState("/ots/apa/esa/sen2a/2026/jun/msi");
+  const [outputPath, setOutputPath] = useState("level0_01/ondisk/odpg/l3ard/Sentinel2_NDVI");
 
-      {open ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-          <WorkspaceSection onOpenUpload={onOpenUpload} onOpenGeoTIFFUpload={onOpenGeoTIFFUpload} />
-          <ProcessingSection onPushLog={onPushLog} />
-          <LayerManagerSection
-            layers={layers}
-            setLayers={setLayers}
-            onPushLog={onPushLog}
-            onRemoveGeoTIFF={onRemoveGeoTIFF}
-          />
-        </div>
-      ) : (
-        <div className="flex flex-1 flex-col items-center gap-4 pt-6">
-          {[
-            { icon: FolderOpen, label: "Workspace" },
-            { icon: Play, label: "Processing" },
-            { icon: Layers, label: "Layers" },
-          ].map((item, i) => {
-            const Icon = item.icon;
-            return (
+  const isGenerateEnabled = Boolean(inputPath.trim() && outputPath.trim());
+
+  const handleGenerateNDVI = () => {
+    if (!isGenerateEnabled) return;
+    onPushLog(
+      "INFO",
+      `NDVI Generation: Input path ("${inputPath.trim()}") and output path ("${outputPath.trim()}") configured. (Backend processing not connected yet)`,
+    );
+    setIsPathPanelOpen(false);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isPathPanelOpen) {
+        setIsPathPanelOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isPathPanelOpen]);
+
+  return (
+    <>
+      <aside
+        className={`relative flex shrink-0 flex-col border-r border-border bg-[var(--surface-0)] transition-[width] duration-300 ease-out shadow-[0_2px_8px_rgba(0,0,0,0.06)] z-10 ${
+          open ? "w-[340px]" : "w-14"
+        }`}
+      >
+        <button
+          onClick={onToggle}
+          className="absolute -right-3 top-6 z-10 grid h-6 w-6 place-items-center rounded-full border border-border bg-[var(--surface-0)] text-muted-foreground shadow-md hover:text-primary transition cursor-pointer"
+          title={open ? "Collapse sidebar" : "Expand sidebar"}
+        >
+          {open ? (
+            <ChevronLeft className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5" />
+          )}
+        </button>
+
+        {open ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+            {/* 1. NDVI GENERATION SECTION */}
+            <NDVIGenerationSection onOpenPaths={() => setIsPathPanelOpen(true)} />
+
+            {/* 2. PROCESS STATUS SECTION */}
+            <ProcessingSection onPushLog={onPushLog} />
+
+            {/* 3. LOCAL NDVI GEOTIFF SECTION */}
+            <LocalGeoTIFFSection onOpenGeoTIFFUpload={onOpenGeoTIFFUpload} />
+
+            {/* 4. LAYER MANAGER SECTION */}
+            <LayerManagerSection
+              layers={layers}
+              setLayers={setLayers}
+              onPushLog={onPushLog}
+              onRemoveGeoTIFF={onRemoveGeoTIFF}
+            />
+          </div>
+        ) : (
+          <div className="flex flex-1 flex-col items-center gap-4 pt-6">
+            {[
+              {
+                icon: FolderKanban,
+                label: "NDVI Generation",
+                onClick: () => setIsPathPanelOpen(true),
+              },
+              { icon: Play, label: "Process Status", onClick: onToggle },
+              {
+                icon: FileImage,
+                label: "Local NDVI GeoTIFF",
+                onClick: onOpenGeoTIFFUpload || onToggle,
+              },
+              { icon: Layers, label: "Layer Manager", onClick: onToggle },
+            ].map((item, i) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={i}
+                  onClick={item.onClick}
+                  title={`View ${item.label}`}
+                  className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground hover:bg-[var(--surface-2)] hover:text-primary transition cursor-pointer"
+                >
+                  <Icon className="h-4 w-4" />
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </aside>
+
+      {/* Floating Path Configuration Overlay Modal (Styled like NDVIGeoTIFFModal) */}
+      {isPathPanelOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/65 backdrop-blur-sm p-4 font-mono select-none">
+          <div className="glass-panel w-full max-w-lg rounded-2xl border border-border bg-[var(--surface-0)] shadow-2xl overflow-hidden animate-ticker">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/20 text-primary">
+                  <FolderKanban className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">NDVI Generation Paths</h3>
+                  <p className="text-[11px] font-medium text-muted-foreground">
+                    Configure backend input & output folder locations
+                  </p>
+                </div>
+              </div>
               <button
-                key={i}
-                onClick={onToggle}
-                title={`Expand & view ${item.label}`}
-                className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground hover:bg-[var(--surface-2)] hover:text-primary transition cursor-pointer"
+                onClick={() => setIsPathPanelOpen(false)}
+                aria-label="Close path configuration modal"
+                className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground transition cursor-pointer"
               >
-                <Icon className="h-4 w-4" />
+                <X className="h-4 w-4" />
               </button>
-            );
-          })}
+            </div>
+
+            {/* Content Body */}
+            <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
+              {/* Input Path */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-foreground">
+                  Input Path
+                </label>
+                <input
+                  type="text"
+                  value={inputPath}
+                  onChange={(e) => setInputPath(e.target.value)}
+                  placeholder="Linux: /path/to/input  |  Windows: C:\path\to\input"
+                  className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                />
+                <p className="text-[10px] text-muted-foreground font-medium">
+                  Enter input folder path containing Sentinel-2 data
+                </p>
+              </div>
+
+              {/* Output Path */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-foreground">
+                  Output Path
+                </label>
+                <input
+                  type="text"
+                  value={outputPath}
+                  onChange={(e) => setOutputPath(e.target.value)}
+                  placeholder="Linux: /path/to/output  |  Windows: C:\path\to\output"
+                  className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                />
+                <p className="text-[10px] text-muted-foreground font-medium">
+                  Enter output folder path for generated NDVI rasters
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3 bg-[var(--surface-1)]">
+              <button
+                onClick={() => setIsPathPanelOpen(false)}
+                className="rounded-md border border-border px-4 py-2 text-xs font-semibold text-foreground hover:bg-[var(--surface-2)] transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGenerateNDVI}
+                disabled={!isGenerateEnabled}
+                className="rounded-md bg-primary text-primary-foreground px-4 py-2 text-xs font-bold shadow-md hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Generate NDVI
+              </button>
+            </div>
+          </div>
         </div>
       )}
-    </aside>
+    </>
   );
 }
 
@@ -158,45 +282,31 @@ function SectionHeader({
   );
 }
 
-function WorkspaceSection({
-  onOpenUpload,
-  onOpenGeoTIFFUpload,
-}: {
-  onOpenUpload: () => void;
-  onOpenGeoTIFFUpload?: () => void;
-}) {
+/**
+ * Section 1: NDVI GENERATION
+ */
+function NDVIGenerationSection({ onOpenPaths }: { onOpenPaths: () => void }) {
   return (
     <section className="glass-panel rounded-xl p-3 bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-      <SectionHeader icon={FolderOpen} title="Workspace Operations" />
+      <SectionHeader icon={FolderKanban} title="NDVI Generation" />
 
-      {/* Button 1: Sentinel-2 Upload */}
       <button
-        onClick={onOpenUpload}
-        className="mb-2 flex w-full items-center gap-2 rounded-lg border border-dashed border-primary/60 bg-primary/10 px-3 py-2 text-xs text-primary transition hover:bg-primary/20 cursor-pointer font-medium"
+        onClick={onOpenPaths}
+        className="mb-1.5 flex w-full items-center gap-2 rounded-lg border border-dashed border-primary/60 bg-primary/10 px-3 py-2 text-xs text-primary transition hover:bg-primary/20 cursor-pointer font-medium"
       >
-        <Upload className="h-3.5 w-3.5 shrink-0" />
-        <span className="font-semibold">Upload Sentinel-2 Dataset</span>
-        <span className="ml-auto font-mono text-[10px] opacity-80">.zip</span>
+        <FolderKanban className="h-3.5 w-3.5 shrink-0" />
+        <span className="font-semibold">Upload Paths</span>
       </button>
-
-      {/* Button 2: Load Local NDVI GeoTIFF */}
-      <div>
-        <button
-          onClick={onOpenGeoTIFFUpload}
-          className="flex w-full items-center gap-2 rounded-lg border border-emerald-500/60 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400 transition hover:bg-emerald-500/20 cursor-pointer font-medium"
-        >
-          <FileImage className="h-3.5 w-3.5 shrink-0" />
-          <span className="font-semibold">Load NDVI GeoTIFF</span>
-          <span className="ml-auto font-mono text-[10px] opacity-80">.tif / .tiff</span>
-        </button>
-        <p className="mt-1 px-1 text-[10px] text-muted-foreground">
-          Visualize an existing NDVI .tif or .tiff
-        </p>
-      </div>
+      <p className="px-1 text-[10px] text-muted-foreground font-medium">
+        Configure backend input and output locations.
+      </p>
     </section>
   );
 }
 
+/**
+ * Section 2: PROCESS STATUS
+ */
 function ProcessingSection({ onPushLog }: { onPushLog: (l: LogLevel, m: string) => void }) {
   const [running, setRunning] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -247,21 +357,32 @@ function ProcessingSection({ onPushLog }: { onPushLog: (l: LogLevel, m: string) 
                 {String(i + 1).padStart(2, "0")}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                  <Icon className="h-3.5 w-3.5 text-primary" />
-                  <span className="truncate">{step.label}</span>
+                <div className="flex items-center justify-between gap-1 text-xs font-semibold text-foreground">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span className="truncate">{step.label}</span>
+                  </div>
+                  {active && (
+                    <span className="font-mono text-[11px] font-bold text-primary shrink-0 animate-pulse">
+                      {Math.min(100, Math.round(progress))}%
+                    </span>
+                  )}
                 </div>
                 <div className="font-mono text-[10px] text-muted-foreground">{step.hint}</div>
                 {active && (
-                  <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--surface-3)]">
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--surface-3)] border border-border/40">
                     <div
-                      className="h-full rounded-full bg-primary transition-[width] duration-200"
-                      style={{ width: `${progress}%` }}
+                      className="h-full rounded-full bg-primary transition-[width] duration-200 shadow-sm"
+                      style={{ width: `${Math.min(100, Math.round(progress))}%` }}
                     />
                   </div>
                 )}
               </div>
-              <Play className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />
+              {active ? (
+                <Loader2 className="h-3.5 w-3.5 shrink-0 text-primary animate-spin" />
+              ) : (
+                <Play className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />
+              )}
             </button>
           );
         })}
@@ -270,6 +391,32 @@ function ProcessingSection({ onPushLog }: { onPushLog: (l: LogLevel, m: string) 
   );
 }
 
+/**
+ * Section 3: LOCAL NDVI GEOTIFF
+ */
+function LocalGeoTIFFSection({ onOpenGeoTIFFUpload }: { onOpenGeoTIFFUpload?: () => void }) {
+  return (
+    <section className="glass-panel rounded-xl p-3 bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+      <SectionHeader icon={FileImage} title="Local NDVI GeoTIFF" />
+
+      <button
+        onClick={onOpenGeoTIFFUpload}
+        className="mb-1.5 flex w-full items-center gap-2 rounded-lg border border-emerald-500/60 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400 transition hover:bg-emerald-500/20 cursor-pointer font-medium"
+      >
+        <FileImage className="h-3.5 w-3.5 shrink-0" />
+        <span className="font-semibold">Load NDVI GeoTIFF</span>
+        <span className="ml-auto font-mono text-[10px] opacity-80">.tif / .tiff</span>
+      </button>
+      <p className="px-1 text-[10px] text-muted-foreground font-medium">
+        Visualize and analyze an existing NDVI GeoTIFF.
+      </p>
+    </section>
+  );
+}
+
+/**
+ * Section 4: LAYER MANAGER
+ */
 function LayerManagerSection({
   layers,
   setLayers,

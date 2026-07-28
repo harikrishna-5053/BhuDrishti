@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { X, Download, FileSpreadsheet, Check } from "lucide-react";
+import { X, Download, Check } from "lucide-react";
+import { toast } from "sonner";
 import type { LogLevel } from "@/lib/types";
 
 interface ExportGeoTIFFModalProps {
@@ -17,36 +18,18 @@ export default function ExportGeoTIFFModal({
 }: ExportGeoTIFFModalProps) {
   const [resolution, setResolution] = useState("10m");
   const [format, setFormat] = useState("cog");
-  const [downloading, setDownloading] = useState(false);
 
   if (!open) return null;
 
   const handleExport = () => {
-    setDownloading(true);
+    toast.info("Not connected yet", {
+      description: "GeoTIFF export service will be connected in the backend integration phase.",
+    });
     onPushLog(
-      "INFO",
-      `Preparing GeoTIFF export for ${resultName} (${resolution}, ${format.toUpperCase()})...`,
+      "WARN",
+      `Export requested for ${resultName} (${resolution}, ${format.toUpperCase()}): Not connected yet to backend raster generation service.`,
     );
-    setTimeout(() => {
-      setDownloading(false);
-      onPushLog("SUCCESS", `GeoTIFF export download initiated for ${resultName}`);
-
-      // Trigger dummy file download
-      const element = document.createElement("a");
-      const file = new Blob(
-        [`GeoTIFF Raster Data for ${resultName}\nResolution: ${resolution}\nCRS: EPSG:4326`],
-        {
-          type: "text/plain",
-        },
-      );
-      element.href = URL.createObjectURL(file);
-      element.download = `${resultName.replace(/[^a-z0-9]/gi, "_").toLowerCase()}_${resolution}.geotiff`;
-      document.body.appendChild(element);
-      element.click();
-      document.body.removeChild(element);
-
-      onClose();
-    }, 1200);
+    onClose();
   };
 
   return (
@@ -144,17 +127,15 @@ export default function ExportGeoTIFFModal({
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3 bg-[var(--surface-1)]">
           <button
             onClick={onClose}
-            disabled={downloading}
-            className="rounded-md border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground transition"
+            className="rounded-md border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground transition cursor-pointer"
           >
             Cancel
           </button>
           <button
             onClick={handleExport}
-            disabled={downloading}
-            className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow-md hover:bg-primary/90 transition"
+            className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow-md hover:bg-primary/90 transition cursor-pointer"
           >
-            {downloading ? "Generating GeoTIFF..." : "Download File"}
+            Download File
           </button>
         </div>
       </div>

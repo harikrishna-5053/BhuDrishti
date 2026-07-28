@@ -1,6 +1,6 @@
 import Header from "@/components/layout/Header";
 import { createFileRoute } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import MainLayout from "@/components/layout/MainLayout";
 import type { LogEntry, LogLevel } from "@/lib/types";
@@ -17,8 +17,9 @@ import NDVIGeoTIFFModal from "@/components/modals/NDVIGeoTIFFModal";
 import AOIStatsModal from "@/components/modals/AOIStatsModal";
 import CartographicExportModal from "@/components/modals/CartographicExportModal";
 import { useGeoTIFFStore } from "@/stores/geotiff-store";
+import { toast } from "sonner";
 import {
-  calculateAOIStatistics,
+  calculateAOIStatisticsAsync,
   type AOIStatsResult,
 } from "@/lib/geotiff/calculate-aoi-statistics";
 import { useTheme } from "@/hooks/use-theme";
@@ -94,6 +95,9 @@ function Dashboard() {
   const [gaugeResultName, setGaugeResultName] = useState("");
   const [aoiModalOpen, setAoiModalOpen] = useState(false);
   const [aoiStatsResult, setAoiStatsResult] = useState<AOIStatsResult | null>(null);
+  const [isAOIAnalyzing, setIsAOIAnalyzing] = useState(false);
+  const [aoiProgress, setAoiProgress] = useState(0);
+  const aoiAbortRef = useRef<AbortController | null>(null);
   const [cartographicModalOpen, setCartographicModalOpen] = useState(false);
 
   const { raster, selectedPixel } = useGeoTIFFStore();
@@ -184,16 +188,30 @@ function Dashboard() {
   };
 
   const handleToggleSwipe = () => {
+    if (!raster) {
+      toast.warning("No Raster Loaded", {
+        description: "Load an NDVI GeoTIFF before using Swipe Comparison.",
+      });
+      pushLog("WARN", "Load an NDVI GeoTIFF before using Swipe Comparison.");
+      return;
+    }
     setSwipeMode((prev) => {
       const next = !prev;
-      pushLog("INFO", next ? "Swipe compare mode activated" : "Swipe compare mode deactivated");
-      if (next) {
-        setBottomTab("change");
-        setBottomPaneExpanded(true);
-      }
+      pushLog(
+        "INFO",
+        next
+          ? "Swipe Comparison mode activated. Drag handle or use Left/Right arrow keys."
+          : "Swipe Comparison mode deactivated.",
+      );
       return next;
     });
   };
+
+  useEffect(() => {
+    if (!raster && swipeMode) {
+      setSwipeMode(false);
+    }
+  }, [raster, swipeMode]);
 
   const handleToggleAOI = () => {
     setAoiMode((prev) => {
@@ -211,23 +229,69 @@ function Dashboard() {
     });
   };
 
-  const handleAOIFinished = (points: [number, number][]) => {
+  const handleAOIFinished = async (points: [number, number][]) => {
     if (!raster) {
       pushLog(
         "WARN",
         "Please load an NDVI GeoTIFF raster to calculate clipped AOI polygon statistics.",
       );
+      toast.warning("No Raster Loaded", {
+        description: "Load a GeoTIFF before running AOI analysis.",
+      });
       return;
     }
-    const stats = calculateAOIStatistics(raster, points);
-    if (stats) {
-      setAoiStatsResult(stats);
-      setAoiModalOpen(true);
-      pushLog(
-        "SUCCESS",
-        `AOI Field Polygon clipped: ${stats.areaHectares} ha (${stats.areaAcres} acres) · Mean NDVI=${stats.mean}, Veg Coverage=${stats.vegetationPercentage}%`,
-      );
+
+    if (aoiAbortRef.current) {
+      aoiAbortRef.current.abort();
     }
+    const abortController = new AbortController();
+    aoiAbortRef.current = abortController;
+
+    setIsAOIAnalyzing(true);
+    setAoiProgress(0);
+
+    try {
+      const stats = await calculateAOIStatisticsAsync(
+        raster,
+        points,
+        (progressPercent) => setAoiProgress(progressPercent),
+        abortController.signal,
+      );
+
+      if (stats.errorTitle) {
+        toast.error(stats.errorTitle, {
+          description: stats.errorMessage,
+        });
+        pushLog("WARN", `AOI Analysis: ${stats.errorTitle} - ${stats.errorMessage}`);
+      } else {
+        setAoiStatsResult(stats);
+        setAoiModalOpen(true);
+        const modeLabel = stats.isExact ? "Exact analysis" : "Estimated from sampled pixels";
+        pushLog(
+          "SUCCESS",
+          `AOI Field Polygon clipped (${modeLabel}): ${stats.areaHectares} ha (${stats.areaAcres} acres) · Mean NDVI=${stats.mean}, Veg Coverage=${stats.vegetationPercentage}%`,
+        );
+      }
+    } catch (err: unknown) {
+      if ((err as Error)?.message === "AOI_ANALYSIS_CANCELLED") {
+        pushLog("INFO", "AOI analysis cancelled by user.");
+      } else {
+        pushLog("ERROR", `AOI Analysis error: ${(err as Error)?.message || String(err)}`);
+      }
+    } finally {
+      setIsAOIAnalyzing(false);
+      setAoiProgress(0);
+      aoiAbortRef.current = null;
+    }
+  };
+
+  const handleCancelAOIAnalysis = () => {
+    if (aoiAbortRef.current) {
+      aoiAbortRef.current.abort();
+      aoiAbortRef.current = null;
+    }
+    setIsAOIAnalyzing(false);
+    setAoiProgress(0);
   };
 
   const handleOpenResult = (name: string, rYear: number) => {
@@ -240,7 +304,7 @@ function Dashboard() {
     setExportModalOpen(true);
   };
 
-  const handleViewResultGauge = (name: string) => {
+  const handleInspectHealth = (name: string) => {
     setGaugeResultName(name);
     setGaugeModalOpen(true);
   };
@@ -255,6 +319,7 @@ function Dashboard() {
             onToggleTheme={toggleTheme}
             measureActive={measureMode}
             swipeActive={swipeMode}
+            swipeDisabled={!raster}
             aoiActive={aoiMode}
             onToggleMeasure={handleToggleMeasure}
             onToggleSwipe={handleToggleSwipe}
@@ -290,8 +355,13 @@ function Dashboard() {
                   measureActive={measureMode}
                   onToggleMeasure={handleToggleMeasure}
                   swipeActive={swipeMode}
+                  onToggleSwipe={handleToggleSwipe}
                   aoiActive={aoiMode}
+                  onToggleAOI={handleToggleAOI}
                   onAOIFinished={handleAOIFinished}
+                  isAOIAnalyzing={isAOIAnalyzing}
+                  aoiProgress={aoiProgress}
+                  onCancelAOIAnalysis={handleCancelAOIAnalysis}
                   bottomPaneExpanded={bottomPaneExpanded}
                 />
               </Suspense>
@@ -328,7 +398,7 @@ function Dashboard() {
           clicked={clicked}
           onOpenResult={handleOpenResult}
           onExportGeoTIFF={handleExportGeoTIFF}
-          onViewResultGauge={handleViewResultGauge}
+          onViewResultGauge={handleInspectHealth}
         />
       </MainLayout>
 
@@ -349,6 +419,8 @@ function Dashboard() {
         onPushLog={pushLog}
         theme={theme}
         onSetTheme={setTheme}
+        layers={layers}
+        setLayers={setLayers}
       />
       <ExportGeoTIFFModal
         open={exportModalOpen}

@@ -18,40 +18,16 @@ interface FieldTransectProfileProps {
 export default function FieldTransectProfile({ points, sampleValues }: FieldTransectProfileProps) {
   const chartData = useMemo(() => {
     if (sampleValues && sampleValues.length > 0) return sampleValues;
-    if (points.length < 2) return [];
+    return [];
+  }, [sampleValues]);
 
-    // Generate transect profile samples between points
-    const samples: { distanceKm: number; ndvi: number }[] = [];
-    let totalDist = 0;
-
-    for (let i = 0; i < points.length - 1; i++) {
-      const p1 = points[i]!;
-      const p2 = points[i + 1]!;
-      const steps = 15;
-
-      for (let s = 0; s <= steps; s++) {
-        const t = s / steps;
-        const lat = p1[0] + (p2[0] - p1[0]) * t;
-        const lng = p1[1] + (p2[1] - p1[1]) * t;
-
-        const dist = totalDist + t * 2.4; // approx dist step
-        const ndvi = Number(
-          (0.2 + 0.5 * Math.sin(t * Math.PI * 3) + Math.random() * 0.1).toFixed(3),
-        );
-        samples.push({ distanceKm: Number(dist.toFixed(2)), ndvi });
-      }
-      totalDist += 2.4;
-    }
-
-    return samples;
-  }, [points, sampleValues]);
-
-  if (points.length < 2 && (!sampleValues || sampleValues.length === 0)) {
+  if (!sampleValues || sampleValues.length === 0) {
     return (
-      <div className="glass-panel rounded-xl p-3 font-mono text-xs flex items-center justify-center text-muted-foreground gap-2 h-36">
-        <Activity className="h-4 w-4 text-primary animate-pulse" />
-        <span>
-          Click 2 or more points on the map to sample an NDVI field transect cross-section
+      <div className="glass-panel rounded-xl p-4 font-mono text-xs flex flex-col items-center justify-center text-center text-muted-foreground gap-1.5 h-44 border border-border">
+        <Activity className="h-5 w-5 text-primary" />
+        <span className="font-bold text-foreground">Field Transect NDVI Cross-Section</span>
+        <span className="text-[11px] max-w-sm">
+          Real line-transect pixel sampling requires backend spatial raster API connection.
         </span>
       </div>
     );

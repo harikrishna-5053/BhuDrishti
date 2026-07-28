@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { X, Settings2, Check, Sun, Moon } from "lucide-react";
+import type { Dispatch, SetStateAction } from "react";
+import { X, Settings2, Check, Sun, Moon, Eye, EyeOff, Map } from "lucide-react";
 import type { LogLevel } from "@/lib/types";
 import type { Theme } from "@/hooks/use-theme";
+import type { LayerState } from "@/components/gis/GISMap";
 
 interface SettingsModalProps {
   open: boolean;
@@ -9,6 +11,8 @@ interface SettingsModalProps {
   onPushLog: (level: LogLevel, msg: string) => void;
   theme?: Theme;
   onSetTheme?: (theme: Theme) => void;
+  layers?: LayerState;
+  setLayers?: Dispatch<SetStateAction<LayerState>>;
 }
 
 export default function SettingsModal({
@@ -17,10 +21,11 @@ export default function SettingsModal({
   onPushLog,
   theme = "dark",
   onSetTheme,
+  layers,
+  setLayers,
 }: SettingsModalProps) {
   const [crs, setCrs] = useState("EPSG:4326");
   const [unit, setUnit] = useState("metric");
-  const [palette, setPalette] = useState("standard");
   const [tileServer, setTileServer] = useState("osm");
 
   if (!open) return null;
@@ -42,23 +47,119 @@ export default function SettingsModal({
             <div>
               <h3 className="text-sm font-semibold text-foreground">Console Settings</h3>
               <p className="text-[11px] text-muted-foreground">
-                Configure map projection & theme preferences
+                Configure map projections, themes & boundary layers
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground transition"
+            className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground transition cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-5 space-y-4 text-xs">
+        <div className="p-5 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
+          {/* Administrative Boundary Layers */}
+          {layers && setLayers && (
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-[10px] uppercase font-bold text-muted-foreground">
+                <Map className="h-3 w-3 text-primary" />
+                Administrative Boundary Layers
+              </label>
+              <div className="space-y-2 rounded-xl border border-border bg-[var(--surface-1)] p-3">
+                {[
+                  {
+                    key: "india" as const,
+                    label: "India Boundary",
+                    hint: "Admin 0 · Country",
+                    swatch: "oklch(0.78 0.17 195)",
+                  },
+                  {
+                    key: "states" as const,
+                    label: "State Boundaries",
+                    hint: "Admin 1 · States & UTs",
+                    swatch: "oklch(0.75 0.13 90)",
+                  },
+                  {
+                    key: "districts" as const,
+                    label: "District Boundaries",
+                    hint: "Admin 2 · Districts",
+                    swatch: "oklch(0.7 0.05 250)",
+                  },
+                ].map((b) => {
+                  const layer = layers[b.key];
+                  return (
+                    <div
+                      key={b.key}
+                      className="flex flex-col gap-1.5 rounded-lg border border-border bg-[var(--surface-0)] p-2 transition hover:border-primary/50"
+                    >
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() =>
+                            setLayers((s) => ({
+                              ...s,
+                              [b.key]: { ...s[b.key], visible: !s[b.key].visible },
+                            }))
+                          }
+                          className={`grid h-6 w-6 place-items-center rounded transition cursor-pointer ${
+                            layer.visible ? "text-primary" : "text-muted-foreground opacity-50"
+                          }`}
+                          title={layer.visible ? "Hide boundary layer" : "Show boundary layer"}
+                        >
+                          {layer.visible ? (
+                            <Eye className="h-3.5 w-3.5" />
+                          ) : (
+                            <EyeOff className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        <div
+                          className="h-3.5 w-3.5 shrink-0 rounded border border-border"
+                          style={{ background: b.swatch }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-xs font-semibold text-foreground">
+                            {b.label}
+                          </div>
+                          <div className="font-mono text-[9px] text-muted-foreground">{b.hint}</div>
+                        </div>
+                      </div>
+
+                      {layer.visible && (
+                        <div className="flex items-center gap-2 pt-1 border-t border-border/40">
+                          <span className="font-mono text-[9px] uppercase text-muted-foreground">
+                            Opacity
+                          </span>
+                          <input
+                            type="range"
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            value={layer.opacity}
+                            onChange={(e) =>
+                              setLayers((s) => ({
+                                ...s,
+                                [b.key]: { ...s[b.key], opacity: parseFloat(e.target.value) },
+                              }))
+                            }
+                            className="h-1 flex-1 accent-primary cursor-pointer"
+                          />
+                          <span className="w-7 font-mono text-right text-[9px] text-muted-foreground font-semibold">
+                            {Math.round(layer.opacity * 100)}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Theme Option */}
           <div>
-            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">
+            <label className="mb-1.5 block text-[10px] uppercase font-bold text-muted-foreground">
               Application Theme Mode
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -91,7 +192,7 @@ export default function SettingsModal({
 
           {/* CRS Setting */}
           <div>
-            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">
+            <label className="mb-1.5 block text-[10px] uppercase font-bold text-muted-foreground">
               Coordinate Reference System
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -117,7 +218,7 @@ export default function SettingsModal({
 
           {/* Unit Measurement */}
           <div>
-            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">
+            <label className="mb-1.5 block text-[10px] uppercase font-bold text-muted-foreground">
               Measurement Units
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -143,13 +244,13 @@ export default function SettingsModal({
 
           {/* Base Map Tile Server */}
           <div>
-            <label className="mb-1.5 block text-[10px] uppercase text-muted-foreground">
+            <label className="mb-1.5 block text-[10px] uppercase font-bold text-muted-foreground">
               Basemap Provider
             </label>
             <select
               value={tileServer}
               onChange={(e) => setTileServer(e.target.value)}
-              className="w-full rounded-md border border-border bg-[var(--surface-1)] px-3 py-2 text-foreground focus:border-primary focus:outline-none"
+              className="w-full rounded-md border border-border bg-[var(--surface-1)] px-3 py-2 text-foreground focus:border-primary focus:outline-none cursor-pointer"
             >
               <option value="osm">OpenStreetMap Standard</option>
               <option value="carto-dark">CartoDB Dark Matter</option>
@@ -162,13 +263,13 @@ export default function SettingsModal({
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3 bg-[var(--surface-1)]">
           <button
             onClick={onClose}
-            className="rounded-md border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground transition"
+            className="rounded-md border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground transition cursor-pointer"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow-md hover:bg-primary/90 transition"
+            className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow-md hover:bg-primary/90 transition cursor-pointer"
           >
             Save Changes
           </button>

@@ -6,11 +6,13 @@ function IconBtn({
   icon: Icon,
   label,
   active,
+  disabled,
   onClick,
 }: {
   icon: typeof Ruler;
   label: string;
   active?: boolean;
+  disabled?: boolean;
   onClick?: () => void;
 }) {
   return (
@@ -18,10 +20,13 @@ function IconBtn({
       title={label}
       aria-label={label}
       onClick={onClick}
-      className={`grid h-8 w-8 place-items-center rounded-md border transition cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary ${
-        active
-          ? "border-primary bg-primary text-primary-foreground shadow-[var(--shadow-glow)]"
-          : "border-border bg-[var(--surface-0)] text-muted-foreground hover:border-primary/60 hover:text-primary hover:bg-[var(--surface-1)]"
+      disabled={disabled}
+      className={`grid h-8 w-8 place-items-center rounded-md border transition focus:outline-none focus:ring-1 focus:ring-primary ${
+        disabled
+          ? "border-border bg-[var(--surface-0)] text-muted-foreground opacity-40 cursor-not-allowed"
+          : active
+            ? "border-primary bg-primary text-primary-foreground shadow-[var(--shadow-glow)] cursor-pointer"
+            : "border-border bg-[var(--surface-0)] text-muted-foreground hover:border-primary/60 hover:text-primary hover:bg-[var(--surface-1)] cursor-pointer"
       }`}
     >
       <Icon className="h-4 w-4" />
@@ -35,6 +40,7 @@ export default function Header({
   onToggleTheme,
   measureActive,
   swipeActive,
+  swipeDisabled,
   aoiActive,
   onToggleMeasure,
   onToggleSwipe,
@@ -51,6 +57,7 @@ export default function Header({
   onToggleTheme?: () => void;
   measureActive?: boolean;
   swipeActive?: boolean;
+  swipeDisabled?: boolean;
   aoiActive?: boolean;
   onToggleMeasure?: () => void;
   onToggleSwipe?: () => void;
@@ -70,12 +77,9 @@ export default function Header({
             <span className="text-base font-semibold tracking-tight text-foreground">
               BhuDrishti
             </span>
-            <span className="rounded border border-border bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground font-semibold">
-              v2.4 · L2A
-            </span>
           </div>
           <span className="text-[11px] text-muted-foreground font-medium">
-            Sentinel-2 NDVI Analytics · India Node
+            Sentinel-2 NDVI Analytics
           </span>
         </div>
       </div>
@@ -90,8 +94,13 @@ export default function Header({
         />
         <IconBtn
           icon={GitCompareArrows}
-          label="Swipe compare mode"
+          label={
+            swipeDisabled
+              ? "Load an NDVI GeoTIFF before using Swipe Comparison."
+              : "Swipe compare mode"
+          }
           active={swipeActive}
+          disabled={swipeDisabled}
           onClick={onToggleSwipe}
         />
         <IconBtn
@@ -115,13 +124,16 @@ export default function Header({
 
       {/* Right Status Section */}
       <div className="flex items-center gap-3 font-mono text-[11px] text-muted-foreground">
-        <span className="hidden md:inline font-medium">CRS: EPSG:4326</span>
-        <span className="hidden md:inline">|</span>
-        <span className="font-medium">
-          {formatCoord(cursor.lat, "lat")}
-          {" , "}
-          {formatCoord(cursor.lng, "lng")}
-        </span>
+        <div className="flex flex-col items-center justify-center text-center leading-tight">
+          <span className="text-[11px] font-medium text-foreground">
+            {formatCoord(cursor.lat, "lat")}
+            <span className="mx-1 text-muted-foreground/70 font-normal">|</span>
+            {formatCoord(cursor.lng, "lng")}
+          </span>
+          <span className="text-[11px] font-semibold text-muted-foreground tracking-tight">
+            CRS: EPSG:4326
+          </span>
+        </div>
         <span className="rounded bg-[var(--surface-2)] px-2 py-0.5 font-semibold text-foreground border border-border">
           z {cursor.zoom.toFixed(0)}
         </span>

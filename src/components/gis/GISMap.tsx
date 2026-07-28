@@ -4,7 +4,17 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import proj4 from "proj4";
 import { toast } from "sonner";
-import { RotateCcw, RotateCw, CheckCircle2, Trash2, X, Ruler } from "lucide-react";
+import {
+  RotateCcw,
+  RotateCw,
+  CheckCircle2,
+  Trash2,
+  X,
+  Ruler,
+  Crop,
+  Loader2,
+  Layers,
+} from "lucide-react";
 import { ndviAt, ndviColor, classify } from "@/lib/ndvi";
 import NDVIGeoTIFFLayer from "./NDVIGeoTIFFLayer";
 import { useGeoTIFFStore } from "@/stores/geotiff-store";
@@ -30,35 +40,6 @@ const INDIA_BOUNDS: L.LatLngBoundsLiteral = [
   [6.5, 68],
   [37.5, 97.5],
 ];
-
-function generateNdviDataURL(year: number) {
-  const w = 320;
-  const h = 320;
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d")!;
-  const img = ctx.createImageData(w, h);
-  const south = INDIA_BOUNDS[0][0];
-  const west = INDIA_BOUNDS[0][1];
-  const north = INDIA_BOUNDS[1][0];
-  const east = INDIA_BOUNDS[1][1];
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const lng = west + ((east - west) * x) / w;
-      const lat = north - ((north - south) * y) / h;
-      const v = ndviAt(lat, lng, year);
-      const c = ndviColor(v).match(/\d+/g)!.map(Number);
-      const i = (y * w + x) * 4;
-      img.data[i] = c[0]!;
-      img.data[i + 1] = c[1]!;
-      img.data[i + 2] = c[2]!;
-      img.data[i + 3] = 220;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-  return canvas.toDataURL("image/png");
-}
 
 function CoordDisplay({ onMove }: { onMove: (lat: number, lng: number, zoom: number) => void }) {
   useMapEvents({
@@ -304,6 +285,39 @@ function AOIPolygonOverlay({ points }: { points: L.LatLngTuple[] }) {
   return null;
 }
 
+function RasterSwipeClipping({
+  swipeActive,
+  swipePos,
+}: {
+  swipeActive?: boolean;
+  swipePos: number;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    let pane = map.getPane("ndviPane");
+    if (!pane) {
+      pane = map.createPane("ndviPane");
+      pane.style.zIndex = "450";
+    }
+
+    if (swipeActive) {
+      // Left side (0 to swipePos%) shows NDVI Raster overlay; Right side shows Base Map
+      pane.style.clipPath = `polygon(0 0, ${swipePos}% 0, ${swipePos}% 100%, 0 100%)`;
+    } else {
+      pane.style.clipPath = "none";
+    }
+
+    return () => {
+      if (pane) {
+        pane.style.clipPath = "none";
+      }
+    };
+  }, [map, swipeActive, swipePos]);
+
+  return null;
+}
+
 export default function GISMap({
   layers,
   year,
@@ -314,8 +328,13 @@ export default function GISMap({
   measureActive,
   onToggleMeasure,
   swipeActive,
+  onToggleSwipe,
   aoiActive,
+  onToggleAOI,
   onAOIFinished,
+  isAOIAnalyzing,
+  aoiProgress,
+  onCancelAOIAnalysis,
   bottomPaneExpanded,
 }: {
   layers: LayerState;
@@ -327,13 +346,15 @@ export default function GISMap({
   measureActive?: boolean;
   onToggleMeasure?: () => void;
   swipeActive?: boolean;
+  onToggleSwipe?: () => void;
   aoiActive?: boolean;
+  onToggleAOI?: () => void;
   onAOIFinished?: (points: [number, number][]) => void;
+  isAOIAnalyzing?: boolean;
+  aoiProgress?: number;
+  onCancelAOIAnalysis?: () => void;
   bottomPaneExpanded?: boolean;
 }) {
-  const [ndviUrl, setNdviUrl] = useState<string | null>(null);
-  const rafRef = useRef<number | null>(null);
-
   // Measurement Mode State (Distance vs Area)
   const [measureModeType, setMeasureModeType] = useState<"distance" | "area">("area");
 
@@ -343,18 +364,16 @@ export default function GISMap({
   const [historyIndex, setHistoryIndex] = useState(0);
   const [isMeasureFinished, setIsMeasureFinished] = useState(false);
 
+  // AOI State & Undo/Redo History
   const [aoiPoints, setAoiPoints] = useState<L.LatLngTuple[]>([]);
+  const [aoiUndoHistory, setAoiUndoHistory] = useState<L.LatLngTuple[][]>([]);
+  const [aoiRedoHistory, setAoiRedoHistory] = useState<L.LatLngTuple[][]>([]);
+  const [isAoiFinished, setIsAoiFinished] = useState(false);
+
   const [swipePos, setSwipePos] = useState(50);
   const isDraggingSwipe = useRef(false);
 
   const { raster, opacity: geoOpacity, visible: geoVisible } = useGeoTIFFStore();
-
-  useEffect(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      setNdviUrl(generateNdviDataURL(year));
-    });
-  }, [year]);
 
   // Reset measure state when tool is deactivated
   useEffect(() => {
@@ -366,8 +385,14 @@ export default function GISMap({
     }
   }, [measureActive]);
 
+  // Reset AOI state when tool is deactivated
   useEffect(() => {
-    if (!aoiActive) setAoiPoints([]);
+    if (!aoiActive) {
+      setAoiPoints([]);
+      setAoiUndoHistory([]);
+      setAoiRedoHistory([]);
+      setIsAoiFinished(false);
+    }
   }, [aoiActive]);
 
   // Handle map click for measurement
@@ -465,14 +490,118 @@ export default function GISMap({
   ]);
 
   const handleAOIClick = (lat: number, lng: number) => {
+    if (isAOIAnalyzing) return;
+    const newPoint: L.LatLngTuple = [lat, lng];
     setAoiPoints((prev) => {
-      const next = [...prev, [lat, lng] as L.LatLngTuple];
-      if (next.length >= 3 && onAOIFinished) {
-        onAOIFinished(next as [number, number][]);
-      }
+      const next = [...prev, newPoint];
+      setAoiUndoHistory((undo) => [...undo, prev]);
+      setAoiRedoHistory([]); // Clear redo history when a new vertex is added after Undo
       return next;
     });
+    setIsAoiFinished(false);
   };
+
+  const handleAOIUndo = useCallback(() => {
+    if (isAOIAnalyzing) return;
+    setAoiPoints((prev) => {
+      if (prev.length === 0) return prev;
+      const next = prev.slice(0, -1);
+      setAoiRedoHistory((redo) => [...redo, prev]);
+      return next;
+    });
+    setIsAoiFinished(false);
+  }, [isAOIAnalyzing]);
+
+  const handleAOIRedo = useCallback(() => {
+    if (isAOIAnalyzing) return;
+    setAoiRedoHistory((redo) => {
+      if (redo.length === 0) return redo;
+      const restored = redo[redo.length - 1]!;
+      setAoiPoints(restored);
+      return redo.slice(0, -1);
+    });
+    setIsAoiFinished(false);
+  }, [isAOIAnalyzing]);
+
+  const handleAOIFinish = useCallback(() => {
+    if (isAOIAnalyzing || aoiPoints.length < 3) return;
+    setIsAoiFinished(true);
+    if (onAOIFinished) {
+      onAOIFinished(aoiPoints as [number, number][]);
+    }
+  }, [isAOIAnalyzing, aoiPoints, onAOIFinished]);
+
+  const handleAOICancel = useCallback(() => {
+    if (onCancelAOIAnalysis) onCancelAOIAnalysis();
+    setAoiPoints([]);
+    setAoiUndoHistory([]);
+    setAoiRedoHistory([]);
+    setIsAoiFinished(false);
+    if (onToggleAOI) onToggleAOI();
+  }, [onCancelAOIAnalysis, onToggleAOI]);
+
+  const handleAOIClear = useCallback(() => {
+    if (onCancelAOIAnalysis) onCancelAOIAnalysis();
+    setAoiPoints([]);
+    setAoiUndoHistory([]);
+    setAoiRedoHistory([]);
+    setIsAoiFinished(false);
+  }, [onCancelAOIAnalysis]);
+
+  // Keyboard Shortcuts for AOI (Ctrl+Z: Undo, Ctrl+Shift+Z: Redo, Enter: Finish, Esc: Cancel, Backspace/Delete: Remove vertex)
+  useEffect(() => {
+    if (!aoiActive) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.tagName === "SELECT" ||
+          (activeEl as HTMLElement).isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleAOICancel();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (aoiPoints.length >= 3 && !isAOIAnalyzing) {
+          handleAOIFinish();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
+        if (e.shiftKey) {
+          e.preventDefault();
+          handleAOIRedo();
+        } else {
+          e.preventDefault();
+          handleAOIUndo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) {
+        e.preventDefault();
+        handleAOIRedo();
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        if (aoiPoints.length > 0 && !isAOIAnalyzing) {
+          e.preventDefault();
+          handleAOIUndo();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    aoiActive,
+    aoiPoints.length,
+    isAOIAnalyzing,
+    handleAOICancel,
+    handleAOIFinish,
+    handleAOIRedo,
+    handleAOIUndo,
+  ]);
 
   const indiaOutline = useMemo<L.LatLngExpression[][]>(
     () => [
@@ -524,10 +653,19 @@ export default function GISMap({
       onMouseMove={(e) => {
         if (!isDraggingSwipe.current) return;
         const rect = e.currentTarget.getBoundingClientRect();
+        if (rect.width <= 0) return;
         const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
         setSwipePos((x / rect.width) * 100);
       }}
+      onTouchMove={(e) => {
+        if (!isDraggingSwipe.current || !e.touches[0]) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const x = Math.max(0, Math.min(rect.width, e.touches[0].clientX - rect.left));
+        setSwipePos((x / rect.width) * 100);
+      }}
       onMouseUp={() => (isDraggingSwipe.current = false)}
+      onTouchEnd={() => (isDraggingSwipe.current = false)}
     >
       <MapContainer
         bounds={INDIA_BOUNDS}
@@ -538,21 +676,13 @@ export default function GISMap({
         worldCopyJump={false}
       >
         <MapResizer bottomPaneExpanded={bottomPaneExpanded} />
+        <RasterSwipeClipping swipeActive={swipeActive} swipePos={swipePos} />
 
         {layers.rgb.visible && (
           <TileLayer
             attribution="&copy; OpenStreetMap contributors"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             opacity={layers.rgb.opacity}
-          />
-        )}
-
-        {ndviUrl && layers.ndvi.visible && !raster && (
-          <ImageOverlay
-            url={ndviUrl}
-            bounds={INDIA_BOUNDS}
-            opacity={layers.ndvi.opacity}
-            zIndex={400}
           />
         )}
 
@@ -588,17 +718,80 @@ export default function GISMap({
         {aoiActive && <AOIPolygonOverlay points={aoiPoints} />}
       </MapContainer>
 
-      {/* Interactive Swipe Curtain Handle Overlay */}
+      {/* Real Interactive Swipe Curtain Handle & Clear Side Indicators */}
       {swipeActive && (
-        <div
-          className="absolute top-0 bottom-0 z-[500] w-1 bg-emerald-400 cursor-ew-resize flex items-center justify-center shadow-[0_0_15px_oklch(0.78_0.17_168)]"
-          style={{ left: `${swipePos}%` }}
-          onMouseDown={() => (isDraggingSwipe.current = true)}
-        >
-          <div className="h-9 w-9 rounded-full bg-emerald-500 text-black border-2 border-white shadow-2xl grid place-items-center font-bold text-xs font-mono select-none">
-            ↔
+        <>
+          {/* Top Label Badges indicating which side represents what */}
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] pointer-events-none flex items-center gap-3 font-mono text-xs select-none">
+            <div className="glass-panel px-3 py-1.5 rounded-xl border border-emerald-500/40 bg-[var(--surface-0)]/95 shadow-xl backdrop-blur flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="font-bold text-emerald-400">NDVI Raster</span>
+              <span className="text-[10px] text-muted-foreground">(Left Side)</span>
+            </div>
+
+            <div className="glass-panel px-3 py-1.5 rounded-xl border border-border bg-[var(--surface-0)]/95 shadow-xl backdrop-blur flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-primary" />
+              <span className="font-bold text-foreground">Base Map</span>
+              <span className="text-[10px] text-muted-foreground">(Right Side)</span>
+            </div>
+
+            {onToggleSwipe && (
+              <button
+                onClick={onToggleSwipe}
+                className="pointer-events-auto grid h-7 w-7 place-items-center rounded-lg border border-border bg-[var(--surface-0)] text-muted-foreground hover:bg-red-500/20 hover:border-red-500 hover:text-red-500 transition cursor-pointer"
+                title="Exit Swipe Comparison Mode (Esc)"
+                aria-label="Exit Swipe Comparison"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
-        </div>
+
+          {/* Vertical Swipe Divider Handle Line */}
+          <div
+            className="absolute top-0 bottom-0 z-[500] w-1 bg-emerald-400 cursor-ew-resize flex items-center justify-center shadow-[0_0_15px_oklch(0.78_0.17_168)]"
+            style={{ left: `${swipePos}%` }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              isDraggingSwipe.current = true;
+            }}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              isDraggingSwipe.current = true;
+            }}
+          >
+            {/* Draggable & Keyboard-Accessible Handle */}
+            <div
+              tabIndex={0}
+              role="slider"
+              aria-label="NDVI Raster vs Base Map Swipe Comparison"
+              aria-valuenow={Math.round(swipePos)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowLeft") {
+                  e.preventDefault();
+                  setSwipePos((p) => Math.max(0, p - 2));
+                } else if (e.key === "ArrowRight") {
+                  e.preventDefault();
+                  setSwipePos((p) => Math.min(100, p + 2));
+                } else if (e.key === "Home") {
+                  e.preventDefault();
+                  setSwipePos(0);
+                } else if (e.key === "End") {
+                  e.preventDefault();
+                  setSwipePos(100);
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  if (onToggleSwipe) onToggleSwipe();
+                }
+              }}
+              className="h-10 w-10 rounded-full bg-emerald-500 text-black border-2 border-white shadow-2xl grid place-items-center font-bold text-xs font-mono select-none cursor-ew-resize focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2"
+            >
+              ↔
+            </div>
+          </div>
+        </>
       )}
 
       {/* 
@@ -762,25 +955,147 @@ export default function GISMap({
         </div>
       )}
 
-      {/* AOI Drawing Tool Badge */}
+      {/* Compact Floating AOI Control Box & Status Panel */}
       {aoiActive && (
-        <div className="absolute top-4 left-20 z-[600] rounded-xl border border-emerald-500/40 bg-[var(--surface-0)]/90 px-4 py-2 font-mono text-xs shadow-xl backdrop-blur flex items-center gap-3 text-emerald-400">
-          <div>
-            <div className="text-[10px] uppercase text-emerald-300">AOI Polygon Tool Active</div>
-            <div className="text-xs font-bold">
-              {aoiPoints.length < 3
-                ? `Click ${3 - aoiPoints.length} more point(s) to enclose AOI field`
-                : `${aoiPoints.length} polygon vertices added`}
+        <div className="absolute top-4 left-20 z-[600] pointer-events-none flex flex-col gap-2 font-mono text-xs select-none">
+          {/* Box 1: Compact AOI Action Toolbar */}
+          <div className="pointer-events-auto glass-panel rounded-xl border border-emerald-500/40 bg-[var(--surface-0)]/95 p-1.5 shadow-xl backdrop-blur flex items-center gap-1.5 animate-ticker">
+            {/* Header Badge */}
+            <div className="flex items-center gap-1.5 px-2 py-1 border-r border-border text-emerald-400 font-bold text-xs">
+              <Crop className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+              <span className="hidden sm:inline">AOI Polygon</span>
+            </div>
+
+            {/* Undo Vertex Button */}
+            <button
+              onClick={handleAOIUndo}
+              disabled={aoiPoints.length === 0 || isAOIAnalyzing}
+              title="Undo Vertex (Ctrl+Z)"
+              aria-label="Undo Vertex"
+              className="grid h-7 w-7 place-items-center rounded-lg border border-border bg-[var(--surface-1)] text-foreground hover:bg-emerald-500/20 hover:border-emerald-500/60 hover:text-emerald-400 transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Redo Vertex Button */}
+            <button
+              onClick={handleAOIRedo}
+              disabled={aoiRedoHistory.length === 0 || isAOIAnalyzing}
+              title="Redo Vertex (Ctrl+Shift+Z)"
+              aria-label="Redo Vertex"
+              className="grid h-7 w-7 place-items-center rounded-lg border border-border bg-[var(--surface-1)] text-foreground hover:bg-emerald-500/20 hover:border-emerald-500/60 hover:text-emerald-400 transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <RotateCw className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Finish AOI Primary Action Button */}
+            <button
+              onClick={handleAOIFinish}
+              disabled={aoiPoints.length < 3 || isAOIAnalyzing}
+              title="Finish AOI (Enter)"
+              aria-label="Finish AOI"
+              className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 shadow transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {isAOIAnalyzing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              )}
+            </button>
+
+            {/* Clear AOI Destructive Action Button */}
+            <button
+              onClick={handleAOIClear}
+              disabled={aoiPoints.length === 0 || isAOIAnalyzing}
+              title="Clear AOI"
+              aria-label="Clear AOI"
+              className="grid h-7 w-7 place-items-center rounded-lg border border-border bg-[var(--surface-1)] text-muted-foreground hover:bg-red-500/20 hover:border-red-500 hover:text-red-600 transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Cancel / Close AOI Button */}
+            <button
+              onClick={handleAOICancel}
+              title="Cancel AOI (Esc)"
+              aria-label="Cancel AOI"
+              className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground transition cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Box 2: Compact AOI Status Card */}
+          <div className="pointer-events-auto glass-panel w-56 rounded-xl border border-border bg-[var(--surface-0)]/95 p-2.5 shadow-xl backdrop-blur font-mono text-xs space-y-1.5 animate-ticker">
+            <div className="flex items-center justify-between border-b border-border pb-1 text-[9px] uppercase font-bold text-muted-foreground">
+              <span>AOI Field Polygon</span>
+              <span
+                className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
+                  isAOIAnalyzing
+                    ? "bg-primary/20 text-primary border border-primary/40 animate-pulse"
+                    : isAoiFinished
+                      ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40"
+                      : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                }`}
+              >
+                {isAOIAnalyzing ? "Analyzing..." : isAoiFinished ? "Completed" : "Drawing"}
+              </span>
+            </div>
+
+            {isAOIAnalyzing ? (
+              <div className="space-y-1.5 py-0.5">
+                <div className="flex justify-between items-center text-[10px] font-bold text-primary">
+                  <span>Analyzing AOI…</span>
+                  <span>{aoiProgress || 0}%</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-3)] border border-border/40">
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width] duration-200"
+                    style={{ width: `${aoiProgress || 0}%` }}
+                  />
+                </div>
+                {onCancelAOIAnalysis && (
+                  <button
+                    onClick={onCancelAOIAnalysis}
+                    className="w-full mt-1 rounded border border-red-500/40 bg-red-500/10 py-1 text-[10px] font-bold text-red-500 hover:bg-red-500/20 transition cursor-pointer"
+                  >
+                    Cancel Analysis
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="text-[10px] font-bold text-foreground">
+                  {aoiPoints.length < 3
+                    ? `Click ${3 - aoiPoints.length} more point(s) to enclose AOI field`
+                    : `${aoiPoints.length} polygon vertices added`}
+                </div>
+                <div className="text-[9px] text-muted-foreground">
+                  {aoiPoints.length < 3
+                    ? "Minimum 3 vertices required to calculate clipped statistics."
+                    : "Click Finish AOI or press Enter to calculate clipped raster statistics."}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Empty State Instruction Overlay when no raster is loaded */}
+      {!raster && !measureActive && !aoiActive && !swipeActive && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[500] pointer-events-auto font-mono text-xs select-none">
+          <div className="glass-panel max-w-md rounded-xl border border-border bg-[var(--surface-0)]/95 p-3 shadow-xl backdrop-blur flex items-center gap-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/20 text-primary">
+              <Layers className="h-5 w-5" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="font-bold text-foreground text-xs">No NDVI Raster Loaded</div>
+              <div className="text-[11px] text-muted-foreground leading-tight">
+                Open <span className="font-semibold text-primary">Load NDVI GeoTIFF</span> from the
+                sidebar to visualize an existing NDVI product.
+              </div>
             </div>
           </div>
-          {aoiPoints.length > 0 && (
-            <button
-              onClick={() => setAoiPoints([])}
-              className="rounded bg-emerald-500/20 px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/30 cursor-pointer"
-            >
-              Reset Points
-            </button>
-          )}
         </div>
       )}
     </div>

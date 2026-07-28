@@ -40,10 +40,17 @@ export default function NDVIGeoTIFFLayer({ raster, opacity, visible }: NDVIGeoTI
       layerRef.current = null;
     }
 
+    let ndviPane = map.getPane("ndviPane");
+    if (!ndviPane) {
+      ndviPane = map.createPane("ndviPane");
+      ndviPane.style.zIndex = "450";
+    }
+
     try {
       const geoLayer = new GeoRasterLayer({
         georaster: raster.georasterObj,
         opacity: opacity,
+        pane: "ndviPane",
         pixelValuesToColorFn: (pixelValues: number[]) => {
           const v = pixelValues[0];
           if (v === undefined || isNaN(v) || !isFinite(v)) return null;

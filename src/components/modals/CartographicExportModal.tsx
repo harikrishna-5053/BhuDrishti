@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { X, Download, Compass, Globe2, Layers, CheckCircle2 } from "lucide-react";
+import { X, Download, Compass, Globe2, Layers } from "lucide-react";
+import { toast } from "sonner";
 import { useGeoTIFFStore } from "@/stores/geotiff-store";
 import type { LogLevel } from "@/lib/types";
 
@@ -15,20 +15,18 @@ export default function CartographicExportModal({
   onPushLog,
 }: CartographicExportModalProps) {
   const { raster, colorRamp } = useGeoTIFFStore();
-  const [exporting, setExporting] = useState(false);
 
   if (!open) return null;
 
   const handleDownloadMap = () => {
-    setExporting(true);
-    setTimeout(() => {
-      onPushLog(
-        "SUCCESS",
-        `Exported publication cartographic PDF map sheet for ${raster ? raster.fileName : "Composite Mosaic"} (Title, Grid, Compass, NDVI Scale bar included)`,
-      );
-      setExporting(false);
-      onClose();
-    }, 1200);
+    toast.info("Not connected yet", {
+      description: "Cartographic map rendering service will be enabled during backend integration.",
+    });
+    onPushLog(
+      "WARN",
+      `Cartographic map sheet export requested: Not connected yet to backend PDF rendering engine.`,
+    );
+    onClose();
   };
 
   return (
@@ -114,24 +112,16 @@ export default function CartographicExportModal({
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3 bg-[var(--surface-1)]">
           <button
             onClick={onClose}
-            disabled={exporting}
-            className="rounded-md border border-border px-4 py-2 text-xs font-semibold text-foreground hover:bg-[var(--surface-2)] transition disabled:opacity-50 cursor-pointer"
+            className="rounded-md border border-border px-4 py-2 text-xs font-semibold text-foreground hover:bg-[var(--surface-2)] transition cursor-pointer"
           >
             Cancel
           </button>
           <button
             onClick={handleDownloadMap}
-            disabled={exporting}
-            className="flex items-center gap-1.5 rounded-md bg-teal-600 text-white px-4 py-2 text-xs font-bold shadow-md hover:bg-teal-500 transition disabled:opacity-50 cursor-pointer"
+            className="flex items-center gap-1.5 rounded-md bg-teal-600 text-white px-4 py-2 text-xs font-bold shadow-md hover:bg-teal-500 transition cursor-pointer"
           >
-            {exporting ? (
-              <>Generating High-Res PDF...</>
-            ) : (
-              <>
-                <Download className="h-3.5 w-3.5" />
-                Export Cartographic Sheet
-              </>
-            )}
+            <Download className="h-3.5 w-3.5" />
+            Export Cartographic Sheet
           </button>
         </div>
       </div>

@@ -140,16 +140,7 @@ export default function BottomPane({
       {expanded && (
         <div className="min-h-0 flex-1 overflow-auto p-3 bg-[var(--background)]">
           {tab === "temporal" && <TemporalPanel lat={point.lat} lng={point.lng} />}
-          {tab === "change" && (
-            <ChangePanel
-              lat={point.lat}
-              lng={point.lng}
-              a={compareA}
-              b={compareB}
-              setA={setCompareA}
-              setB={setCompareB}
-            />
-          )}
+          {tab === "change" && <ChangePanel />}
           {tab === "results" && (
             <ResultsPanel
               onOpenResult={onOpenResult}
@@ -193,297 +184,132 @@ function TabBtn({
 function TemporalPanel({ lat, lng }: { lat: number; lng: number }) {
   const { raster } = useGeoTIFFStore();
 
-  const data = useMemo(() => {
-    return monthlyTimeline(lat, lng, 2026).map((d) => ({
-      month: d.month,
-      ndvi: d.ndvi,
-    }));
-  }, [lat, lng]);
+  if (!raster) {
+    return (
+      <div className="glass-panel h-full rounded-xl p-6 bg-[var(--surface-0)] border border-border flex flex-col items-center justify-center text-center gap-2 font-mono text-xs">
+        <BarChart3 className="h-8 w-8 text-muted-foreground/60" />
+        <div className="text-sm font-bold text-foreground">Temporal Phenology Timeline</div>
+        <div className="text-muted-foreground max-w-md">
+          Multiple dated NDVI rasters are required for temporal analysis. Load or process
+          multi-temporal GeoTIFF datasets to generate phenology time-series.
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div
-      className={`grid h-full gap-3 ${raster ? "grid-cols-1 lg:grid-cols-[1fr_360px]" : "grid-cols-1"}`}
-    >
-      <div className="glass-panel flex h-full min-h-0 flex-col rounded-xl p-3 bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-        <div className="mb-2 flex items-center justify-between">
+    <div className="grid h-full gap-3 grid-cols-1 lg:grid-cols-[1fr_360px]">
+      <div className="glass-panel flex h-full min-h-0 flex-col rounded-xl p-4 bg-[var(--surface-0)] border border-border justify-center font-mono space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+            <BarChart3 className="h-5 w-5" />
+          </div>
           <div>
-            <div className="text-xs font-bold text-foreground">Monthly NDVI Phenology Timeline</div>
-            <div className="font-mono text-[10px] text-muted-foreground font-medium">
-              {formatCoord(lat, "lat")} · {formatCoord(lng, "lng")}
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground font-medium">
-            <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_6px_var(--color-primary)]" />
-            Active Phenology
+            <div className="text-xs font-bold text-foreground">Single-Date NDVI Product Loaded</div>
+            <div className="text-[11px] text-muted-foreground font-medium">{raster.fileName}</div>
           </div>
         </div>
-        <div className="min-h-0 flex-1">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 4, right: 12, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-              <XAxis
-                dataKey="month"
-                tick={{ fill: "var(--color-muted-foreground)", fontSize: 10 }}
-                stroke="var(--color-border)"
-              />
-              <YAxis
-                domain={[-0.1, 0.9]}
-                tick={{ fill: "var(--color-muted-foreground)", fontSize: 10 }}
-                stroke="var(--color-border)"
-              />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--surface-0)",
-                  color: "var(--color-foreground)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 8,
-                  fontSize: 11,
-                  fontFamily: "JetBrains Mono",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="ndvi"
-                stroke="var(--color-primary)"
-                strokeWidth={2.5}
-                dot={{ r: 3 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+
+        <div className="rounded-lg border border-border bg-[var(--surface-1)] p-3 text-xs text-muted-foreground space-y-2">
+          <p>
+            <strong className="text-foreground">Requirement Note:</strong> Multiple dated NDVI
+            rasters are required for temporal analysis, monthly phenology trends, and multi-year
+            comparison.
+          </p>
+          <p className="text-[11px]">
+            Use <strong className="text-foreground">Crop Health Classification</strong> on the right
+            to inspect single-date scientific index statistics derived from{" "}
+            <code className="text-primary">{raster.fileName}</code>.
+          </p>
         </div>
       </div>
 
-      {raster && <CropHealthGauge />}
+      <CropHealthGauge />
     </div>
   );
 }
 
-function ChangePanel({
-  lat,
-  lng,
-  a,
-  b,
-  setA,
-  setB,
-}: {
-  lat: number;
-  lng: number;
-  a: number;
-  b: number;
-  setA: (y: number) => void;
-  setB: (y: number) => void;
-}) {
-  const data = useMemo(() => {
-    return monthlyTimeline(lat, lng, a).map((d, i) => {
-      const bv = monthlyTimeline(lat, lng, b)[i]!.ndvi;
-      return { month: d.month, delta: bv - d.ndvi };
-    });
-  }, [lat, lng, a, b]);
-
+function ChangePanel() {
   return (
-    <div className="grid h-full grid-cols-1 gap-3 lg:grid-cols-[260px_1fr]">
-      <div className="glass-panel rounded-xl p-3 flex flex-col justify-between bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-        <div>
-          <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Compare Reference
-          </div>
-          <div className="space-y-2">
-            <YearPicker label="Reference (A)" value={a} onChange={setA} />
-            <YearPicker label="Target (B)" value={b} onChange={setB} />
-          </div>
-        </div>
-        <div className="font-mono text-[10px] text-muted-foreground border-t border-border pt-2 font-medium">
-          Calculates pixel-by-pixel vegetation index delta between target periods.
-        </div>
-      </div>
-
-      <div className="glass-panel flex min-h-0 flex-col rounded-xl p-3 bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-        <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-          Monthly Delta Trend ({a} → {b})
-        </div>
-        <div className="min-h-0 flex-1">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 4, right: 4, left: -25, bottom: 0 }}>
-              <defs>
-                <linearGradient id="pos" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--success)" stopOpacity={0.6} />
-                  <stop offset="100%" stopColor="var(--success)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-              <XAxis
-                dataKey="month"
-                tick={{ fill: "var(--color-muted-foreground)", fontSize: 9 }}
-                stroke="var(--color-border)"
-              />
-              <YAxis
-                tick={{ fill: "var(--color-muted-foreground)", fontSize: 9 }}
-                stroke="var(--color-border)"
-              />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--surface-0)",
-                  color: "var(--color-foreground)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 8,
-                  fontSize: 11,
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                }}
-              />
-              <ReferenceLine y={0} stroke="var(--color-border)" />
-              <Area
-                type="monotone"
-                dataKey="delta"
-                stroke="var(--success)"
-                fill="url(#pos)"
-                strokeWidth={2}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+    <div className="glass-panel h-full rounded-xl p-6 bg-[var(--surface-0)] border border-border flex flex-col items-center justify-center text-center gap-2 font-mono text-xs">
+      <GitCompareArrows className="h-8 w-8 text-muted-foreground/60" />
+      <div className="text-sm font-bold text-foreground">Change Detection Unavailable</div>
+      <div className="text-muted-foreground max-w-md">
+        Multiple dated NDVI rasters are required for temporal analysis and change detection (target
+        minus reference index delta). Load multi-date GeoTIFF rasters to compute pixel index deltas.
       </div>
     </div>
   );
 }
-
-function YearPicker({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (y: number) => void;
-}) {
-  return (
-    <div>
-      <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </div>
-      <div className="flex rounded-md border border-border bg-[var(--surface-1)] p-0.5">
-        {[2024, 2025, 2026].map((y) => (
-          <button
-            key={y}
-            onClick={() => onChange(y)}
-            className={`flex-1 rounded px-2 py-1 font-mono text-xs transition cursor-pointer ${
-              y === value
-                ? "bg-primary text-primary-foreground font-bold shadow-sm"
-                : "text-muted-foreground hover:text-foreground font-medium"
-            }`}
-          >
-            {y}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- Results Explorer ---------------- */
-
-const RESULTS = [
-  {
-    id: "r1",
-    name: "NDVI Mosaic · Jan 2026",
-    date: "2026-01-31",
-    tile: "T44QMG + 3",
-    resolution: "10 m",
-    projection: "EPSG:4326",
-    stats: { mean: 0.61, coverage: "98%" },
-    year: 2026,
-  },
-  {
-    id: "r2",
-    name: "NDVI Mosaic · Q4 2025",
-    date: "2025-12-30",
-    tile: "T43PGR + 5",
-    resolution: "10 m",
-    projection: "EPSG:4326",
-    stats: { mean: 0.48, coverage: "94%" },
-    year: 2025,
-  },
-  {
-    id: "r3",
-    name: "Change Map 2025→2026",
-    date: "2026-02-02",
-    tile: "IN·subset",
-    resolution: "30 m",
-    projection: "EPSG:4326",
-    stats: { mean: 0.13, coverage: "100%" },
-    year: 2026,
-  },
-];
 
 function ResultsPanel({
-  onOpenResult,
   onExportGeoTIFF,
-  onViewResultGauge,
 }: {
   onOpenResult?: (name: string, year: number) => void;
   onExportGeoTIFF?: (name: string) => void;
   onViewResultGauge?: (name: string) => void;
 }) {
+  const { raster, zoomTrigger } = useGeoTIFFStore();
+
+  if (!raster) {
+    return (
+      <div className="glass-panel h-full rounded-xl p-6 bg-[var(--surface-0)] border border-border flex flex-col items-center justify-center text-center gap-2 font-mono text-xs">
+        <Sparkles className="h-8 w-8 text-muted-foreground/60" />
+        <div className="text-sm font-bold text-foreground">No Result Layers Available</div>
+        <div className="text-muted-foreground max-w-md">
+          No backend-generated or local result layers available yet. Load an NDVI GeoTIFF file or
+          run NDVI Generation to create raster result layers.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {RESULTS.map((r) => (
-        <div
-          key={r.id}
-          className="glass-panel overflow-hidden rounded-xl bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
-        >
-          <div
-            className="relative h-20 w-full"
-            style={{
-              background:
-                r.id === "r3"
-                  ? "linear-gradient(135deg, oklch(0.55 0.2 30), oklch(0.7 0.03 250), oklch(0.55 0.2 150))"
-                  : "var(--gradient-ndvi)",
-            }}
-          >
-            <div className="absolute inset-0 scan-line" />
-            <div className="absolute right-2 top-2 rounded bg-black/50 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-white backdrop-blur border border-white/20">
-              {r.year}
-            </div>
+      <div className="glass-panel overflow-hidden rounded-xl bg-[var(--surface-0)] border border-emerald-500/40 shadow-lg font-mono">
+        <div className="relative h-14 w-full bg-[var(--surface-1)] border-b border-border flex items-center justify-between px-3">
+          <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/40">
+            Active Local GeoTIFF
+          </span>
+          <span className="text-[10px] text-muted-foreground font-bold">{raster.crs}</span>
+        </div>
+        <div className="p-3">
+          <div className="text-sm font-bold text-foreground truncate" title={raster.fileName}>
+            {raster.fileName}
           </div>
-          <div className="p-3 font-mono">
-            <div className="text-sm font-bold text-foreground">{r.name}</div>
-            <div className="text-[10px] text-muted-foreground font-medium">
-              {r.date} · {r.tile}
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
-              <MiniField label="Resolution" value={r.resolution} />
-              <MiniField label="Projection" value={r.projection} />
-              <MiniField label="Mean NDVI" value={r.stats.mean.toFixed(2)} />
-              <MiniField label="Coverage" value={r.stats.coverage} />
-            </div>
-            <div className="mt-3 flex items-center gap-1.5">
-              <button
-                onClick={() => onOpenResult && onOpenResult(r.name, r.year)}
-                className="flex-1 rounded-md bg-primary/15 px-2 py-1.5 text-xs font-bold text-primary hover:bg-primary/25 transition flex items-center justify-center gap-1 border border-primary/30 cursor-pointer"
-                title="Load raster result on map"
-              >
-                <MapIcon className="h-3 w-3" />
-                Open
-              </button>
-              <button
-                onClick={() => onExportGeoTIFF && onExportGeoTIFF(r.name)}
-                className="flex-1 rounded-md bg-[var(--surface-1)] border border-border px-2 py-1.5 text-xs font-bold text-foreground hover:bg-[var(--surface-2)] transition flex items-center justify-center gap-1 cursor-pointer"
-                title="Export GeoTIFF file"
-              >
-                <Download className="h-3 w-3" />
-                GeoTIFF
-              </button>
-              <button
-                onClick={() => onViewResultGauge && onViewResultGauge(r.name)}
-                className="rounded-md bg-[var(--surface-1)] border border-border p-1.5 text-xs text-muted-foreground hover:text-foreground transition cursor-pointer"
-                title="View band statistics"
-              >
-                <Gauge className="h-3.5 w-3.5" />
-              </button>
-            </div>
+          <div className="text-[10px] text-muted-foreground font-medium mt-0.5">
+            {(raster.fileSize / (1024 * 1024)).toFixed(2)} MB · {raster.width} × {raster.height} px
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
+            <MiniField label="Mean NDVI" value={raster.statistics.mean.toFixed(3)} />
+            <MiniField
+              label="Veg Coverage"
+              value={`${raster.statistics.vegetationPercentage.toFixed(1)}%`}
+            />
+            <MiniField
+              label="Min / Max"
+              value={`${raster.statistics.minimum.toFixed(2)} / ${raster.statistics.maximum.toFixed(2)}`}
+            />
+            <MiniField label="Projection" value={raster.crs} />
+          </div>
+          <div className="mt-3 flex items-center gap-1.5">
+            <button
+              onClick={() => useGeoTIFFStore.setState({ zoomTrigger: zoomTrigger + 1 })}
+              className="flex-1 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 px-2 py-1.5 text-xs font-bold hover:bg-emerald-500/30 transition flex items-center justify-center gap-1 cursor-pointer"
+            >
+              <MapIcon className="h-3 w-3" />
+              Zoom to Bounds
+            </button>
+            <button
+              onClick={() => onExportGeoTIFF && onExportGeoTIFF(raster.fileName)}
+              className="flex-1 rounded-md bg-[var(--surface-1)] border border-border px-2 py-1.5 text-xs font-bold text-foreground hover:bg-[var(--surface-2)] transition flex items-center justify-center gap-1 cursor-pointer"
+            >
+              <Download className="h-3 w-3" />
+              Export
+            </button>
           </div>
         </div>
-      ))}
+      </div>
     </div>
   );
 }

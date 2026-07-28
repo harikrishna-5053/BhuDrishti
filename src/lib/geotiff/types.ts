@@ -15,6 +15,8 @@ export interface AffineTransform {
   pixelWidth: number;
   pixelHeight: number;
   crs: string;
+  skewX?: number;
+  skewY?: number;
 }
 
 export interface SelectedPixelInfo {
