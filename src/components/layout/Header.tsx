@@ -69,9 +69,11 @@ export default function Header({
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-[var(--surface-0)] px-4 shadow-[0_1px_6px_rgba(0,0,0,0.06)] relative z-20">
       {/* Left Logo Section */}
       <div className="flex items-center gap-3">
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground shadow-[0_0_16px_oklch(0.78_0.17_168_/_40%)]">
-          <Globe2 className="h-5 w-5" />
-        </div>
+        <img
+          src="/favicon.svg"
+          alt="BhuDrishti Logo"
+          className="h-9 w-9 shrink-0 object-contain filter drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+        />
         <div className="leading-tight">
           <div className="flex items-center gap-2">
             <span className="text-base font-semibold tracking-tight text-foreground">
