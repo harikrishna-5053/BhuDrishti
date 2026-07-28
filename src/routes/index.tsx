@@ -76,7 +76,9 @@ function Dashboard() {
   const [clicked, setClicked] = useState<{ lat: number; lng: number } | null>(null);
   const [bottomPaneExpanded, setBottomPaneExpanded] = useState(false);
 
-  const [bottomTab, setBottomTab] = useState<"temporal" | "change" | "results" | "log">("temporal");
+  const [bottomTab, setBottomTab] = useState<
+    "temporal" | "change" | "results" | "metadata" | "log"
+  >("temporal");
   const [compareA, setCompareA] = useState(2025);
   const [compareB, setCompareB] = useState(2026);
 
@@ -105,6 +107,7 @@ function Dashboard() {
   useEffect(() => {
     if (raster) {
       setBottomPaneExpanded(true);
+      setBottomTab("metadata");
     } else {
       setBottomPaneExpanded(false);
     }
@@ -158,8 +161,8 @@ function Dashboard() {
 
   const handleClick = (lat: number, lng: number) => {
     setClicked({ lat, lng });
+    setBottomPaneExpanded(false);
     if (selectedPixel && selectedPixel.value !== null) {
-      setBottomPaneExpanded(true);
       pushLog(
         "INFO",
         `Real GeoTIFF Point analysis: ${lat.toFixed(4)}°, ${lng.toFixed(4)}° · Row=${selectedPixel.row}, Col=${selectedPixel.col} · NDVI=${selectedPixel.value.toFixed(3)}`,

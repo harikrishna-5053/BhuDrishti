@@ -211,23 +211,124 @@ export async function readNDVIGeoTIFF(
 
   validateTransformedBounds(geoBounds);
 
-  // 11. Extract Band Pixel Values
-  const rawValues = georasterObj.values[0];
-  let valuesFloat32: Float32Array;
+  // 11. Extract & Normalize Band Pixel Values to [-1.0, +1.0]
+  const numberOfRasters = georasterObj.numberOfRasters || 1;
+  const totalPixels = georasterObj.width * georasterObj.height;
+  const valuesFloat32 = new Float32Array(totalPixels);
+  const rawNoData = georasterObj.noDataValue !== undefined ? georasterObj.noDataValue : null;
 
-  if (rawValues instanceof Float32Array) {
-    valuesFloat32 = rawValues;
-  } else if (Array.isArray(rawValues)) {
-    const flatLength = georasterObj.width * georasterObj.height;
-    valuesFloat32 = new Float32Array(flatLength);
-    let offset = 0;
-    for (let r = 0; r < rawValues.length; r++) {
-      const row = rawValues[r] as unknown as number[];
-      valuesFloat32.set(row, offset);
-      offset += row.length;
+  // Helper to extract a single band array into a flat Float32Array
+  const extractFlatBand = (bandIdx: number): Float32Array => {
+    const rawBand = georasterObj.values[bandIdx];
+    const flat = new Float32Array(totalPixels);
+    if (!rawBand) return flat;
+
+    if (rawBand instanceof Float32Array) {
+      return rawBand;
+    } else if (Array.isArray(rawBand)) {
+      let offset = 0;
+      for (let r = 0; r < rawBand.length; r++) {
+        const row = rawBand[r] as unknown as ArrayLike<number>;
+        if (row && row.length) {
+          flat.set(row, offset);
+          offset += row.length;
+        }
+      }
+    } else {
+      flat.set(rawBand as ArrayLike<number>);
+    }
+    return flat;
+  };
+
+  const b0 = extractFlatBand(0);
+
+  if (numberOfRasters >= 3) {
+    // Multi-band composite (e.g. RGB or False-Color Sentinel-2 NDVI export)
+    const b1 = extractFlatBand(1);
+    const b2 = extractFlatBand(2);
+
+    // Determine pixel value scale (e.g. 0..255, 0..65535, or 0..1)
+    let maxPixelVal = 0;
+    const sampleLimit = Math.min(totalPixels, 10000);
+    for (let i = 0; i < sampleLimit; i++) {
+      if (b0[i]! > maxPixelVal) maxPixelVal = b0[i]!;
+      if (b1[i]! > maxPixelVal) maxPixelVal = b1[i]!;
+      if (b2[i]! > maxPixelVal) maxPixelVal = b2[i]!;
+    }
+
+    const scaleFactor = maxPixelVal > 1.0 ? (maxPixelVal > 255 ? 65535.0 : 255.0) : 1.0;
+
+    // Detect if imagery is False-Color NIR (Band 0 = NIR, Band 1 = Red) or True Color / Heatmap
+    let rSum = 0;
+    let gSum = 0;
+    let count = 0;
+    for (let i = 0; i < sampleLimit; i++) {
+      if (b0[i]! > 0 || b1[i]! > 0 || b2[i]! > 0) {
+        rSum += b0[i]!;
+        gSum += b1[i]!;
+        count++;
+      }
+    }
+    const isFalseColorNIR = count > 0 && rSum > gSum;
+
+    for (let i = 0; i < totalPixels; i++) {
+      const r = b0[i]! / scaleFactor;
+      const g = b1[i]! / scaleFactor;
+      const b = b2[i]! / scaleFactor;
+
+      // Background / NoData check
+      if ((r === 0 && g === 0 && b === 0) || (rawNoData !== null && b0[i] === rawNoData)) {
+        valuesFloat32[i] = -9999;
+        continue;
+      }
+
+      let indexVal: number;
+      if (isFalseColorNIR) {
+        // NIR is in Band 0 (Red channel), Red is in Band 1
+        const denom = r + g;
+        indexVal = denom > 1e-5 ? (r - g) / denom : 0;
+      } else {
+        // Visual RGB heatmap: Green channel dominates vegetation
+        const denom = g + r;
+        indexVal = denom > 1e-5 ? (g - r) / denom : 0;
+      }
+
+      valuesFloat32[i] = Math.max(-1.0, Math.min(1.0, indexVal));
     }
   } else {
-    valuesFloat32 = new Float32Array(rawValues as ArrayLike<number>);
+    // Single-Band or Dual-Band Raster
+    let minVal = Infinity;
+    let maxVal = -Infinity;
+    const sampleLimit = Math.min(totalPixels, 10000);
+    for (let i = 0; i < sampleLimit; i++) {
+      const v = b0[i]!;
+      if (isNaN(v) || (rawNoData !== null && Math.abs(v - rawNoData) < 1e-4) || v === -9999)
+        continue;
+      if (v < minVal) minVal = v;
+      if (v > maxVal) maxVal = v;
+    }
+
+    const isScaledInt16 = maxVal > 1.5 && maxVal <= 10000 && minVal >= -10000;
+    const isUint8 = maxVal > 1.5 && maxVal <= 255 && minVal >= 0;
+
+    for (let i = 0; i < totalPixels; i++) {
+      const v = b0[i]!;
+      if (isNaN(v) || (rawNoData !== null && Math.abs(v - rawNoData) < 1e-4) || v === -9999) {
+        valuesFloat32[i] = -9999;
+        continue;
+      }
+
+      let normalized: number;
+      if (isScaledInt16) {
+        normalized = v / 10000.0;
+      } else if (isUint8) {
+        normalized = (v / 255.0) * 2.0 - 1.0;
+      } else {
+        normalized = v;
+      }
+
+      valuesFloat32[i] = Math.max(-1.0, Math.min(1.0, normalized));
+    }
   }
 
   const noDataValue = georasterObj.noDataValue !== undefined ? georasterObj.noDataValue : null;
@@ -249,6 +350,8 @@ export async function readNDVIGeoTIFF(
     id: `geotiff-${Date.now()}`,
     fileName: file.name,
     fileSize: file.size,
+    fileType: "GeoTIFF (.tif)",
+    dataType: "Float32 (32-bit Float)",
     width: georasterObj.width,
     height: georasterObj.height,
     bandCount: georasterObj.numberOfRasters,

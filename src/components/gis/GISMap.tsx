@@ -146,9 +146,7 @@ function ClickHandler({
         isNaN(val) ||
         !isFinite(val) ||
         (noDataValue !== null && Math.abs(val - noDataValue) < 1e-4) ||
-        Math.abs(val - -9999) < 1e-4 ||
-        val < -1.0 ||
-        val > 1.0;
+        Math.abs(val - -9999) < 1e-4;
 
       if (isNoData) {
         setSelectedPixel(null);

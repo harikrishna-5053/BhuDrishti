@@ -13,7 +13,6 @@ import {
   FileImage,
   Trash2,
   Maximize2,
-  Palette,
   X,
   Loader2,
 } from "lucide-react";
@@ -508,34 +507,6 @@ function LayerManagerSection({
               >
                 <Trash2 className="h-3 w-3" />
               </button>
-            </div>
-
-            {/* Color Ramp Palette Switcher */}
-            <div className="flex items-center gap-1.5 pt-1 border-t border-emerald-500/20">
-              <Palette className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span className="text-[9px] uppercase font-bold text-muted-foreground">Ramp:</span>
-              <div className="grid grid-cols-4 gap-1 flex-1">
-                {(
-                  [
-                    { id: "ndvi", label: "NDVI" },
-                    { id: "viridis", label: "Viridis" },
-                    { id: "spectral", label: "Spectral" },
-                    { id: "thermal", label: "Thermal" },
-                  ] as const
-                ).map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setColorRamp(item.id as ColorRampPreset)}
-                    className={`rounded px-1 py-0.5 text-[9px] font-bold text-center transition cursor-pointer ${
-                      colorRamp === item.id
-                        ? "bg-emerald-600 text-white shadow-sm"
-                        : "bg-[var(--surface-0)] border border-border text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {/* Opacity Slider */}

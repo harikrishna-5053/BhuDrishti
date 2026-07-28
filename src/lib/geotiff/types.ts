@@ -55,6 +55,8 @@ export interface LoadedNDVIRaster {
   id: string;
   fileName: string;
   fileSize: number;
+  fileType?: string;
+  dataType?: string;
   width: number;
   height: number;
   bandCount: number;

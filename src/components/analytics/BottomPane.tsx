@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
+  FileText,
   Gauge,
   GitCompareArrows,
   Layers,
@@ -30,8 +31,6 @@ import {
   YAxis,
 } from "recharts";
 
-import { monthlyTimeline } from "@/lib/ndvi";
-
 import { formatCoord } from "@/lib/geo-format";
 
 import type { LogEntry, LogLevel } from "@/lib/types";
@@ -39,6 +38,7 @@ import type { LogEntry, LogLevel } from "@/lib/types";
 import { useGeoTIFFStore } from "@/stores/geotiff-store";
 
 import CropHealthGauge from "./CropHealthGauge";
+import MetadataPanel from "@/components/metadata/MetadataPanel";
 
 /* ---------------- Bottom Pane ---------------- */
 
@@ -59,8 +59,8 @@ export default function BottomPane({
 }: {
   expanded: boolean;
   onToggleExpand: () => void;
-  tab: "temporal" | "change" | "results" | "log";
-  setTab: (t: "temporal" | "change" | "results" | "log") => void;
+  tab: "temporal" | "change" | "results" | "metadata" | "log";
+  setTab: (t: "temporal" | "change" | "results" | "metadata" | "log") => void;
   logs: LogEntry[];
   compareA: number;
   compareB: number;
@@ -74,6 +74,13 @@ export default function BottomPane({
   const { raster } = useGeoTIFFStore();
   const point = clicked ?? { lat: 22.9, lng: 79.1 };
 
+  const handleTabClick = (t: "temporal" | "change" | "results" | "metadata" | "log") => {
+    setTab(t);
+    if (!expanded) {
+      onToggleExpand();
+    }
+  };
+
   return (
     <div
       className={`flex shrink-0 flex-col border-t border-border bg-[var(--surface-0)] transition-[height] duration-300 ease-in-out overflow-hidden shadow-[0_-2px_10px_rgba(0,0,0,0.06)] relative z-20 ${
@@ -83,20 +90,35 @@ export default function BottomPane({
       {/* Tab Header / Compact Handle Bar */}
       <div className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3 bg-[var(--surface-1)]">
         <div className="flex items-center gap-1">
-          <TabBtn active={tab === "temporal"} onClick={() => setTab("temporal")} icon={BarChart3}>
+          <TabBtn
+            active={tab === "temporal"}
+            onClick={() => handleTabClick("temporal")}
+            icon={BarChart3}
+          >
             Temporal Analytics
           </TabBtn>
           <TabBtn
             active={tab === "change"}
-            onClick={() => setTab("change")}
+            onClick={() => handleTabClick("change")}
             icon={GitCompareArrows}
           >
             Change Detection
           </TabBtn>
-          <TabBtn active={tab === "results"} onClick={() => setTab("results")} icon={Sparkles}>
+          <TabBtn
+            active={tab === "results"}
+            onClick={() => handleTabClick("results")}
+            icon={Sparkles}
+          >
             Results Explorer
           </TabBtn>
-          <TabBtn active={tab === "log"} onClick={() => setTab("log")} icon={Terminal}>
+          <TabBtn
+            active={tab === "metadata"}
+            onClick={() => handleTabClick("metadata")}
+            icon={FileText}
+          >
+            GeoTIFF Metadata
+          </TabBtn>
+          <TabBtn active={tab === "log"} onClick={() => handleTabClick("log")} icon={Terminal}>
             Processing Log
             <span className="ml-1.5 rounded bg-primary/20 px-1.5 py-0.5 font-mono text-[9px] text-primary font-bold">
               {logs.length}
@@ -148,6 +170,7 @@ export default function BottomPane({
               onViewResultGauge={onViewResultGauge}
             />
           )}
+          {tab === "metadata" && <MetadataPanel />}
           {tab === "log" && <LogConsole logs={logs} />}
         </div>
       )}
