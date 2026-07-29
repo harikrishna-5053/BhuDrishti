@@ -42,8 +42,8 @@ const INDIA_BOUNDS: L.LatLngBoundsLiteral = [
   [37.5, 97.5],
 ];
 
-const INDIA_STYLE: L.PathOptions = { color: "#0284c7", weight: 2 };
-const STATE_STYLE: L.PathOptions = { color: "#475569", weight: 1.2, dashArray: "4 4" };
+const INDIA_STYLE: L.PathOptions = { color: "#38bdf8", weight: 2.5 };
+const STATE_STYLE: L.PathOptions = { color: "#64748b", weight: 1.2, dashArray: "4 4" };
 const DISTRICT_STYLE: L.PathOptions = { color: "#94a3b8", weight: 0.6 };
 
 function CoordDisplay({ onMove }: { onMove: (lat: number, lng: number, zoom: number) => void }) {
@@ -633,6 +633,7 @@ export default function GISMap({
         minZoom={4}
         maxZoom={14}
         worldCopyJump={false}
+        preferCanvas={true}
       >
         <MapResizer bottomPaneExpanded={bottomPaneExpanded} />
         <RasterSwipeClipping swipeActive={swipeActive} swipePos={swipePos} />

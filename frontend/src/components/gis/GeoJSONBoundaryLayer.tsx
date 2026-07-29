@@ -83,39 +83,71 @@ export default function GeoJSONBoundaryLayer({
     };
   }, [url, visible, layerName, onStatusChange]);
 
-  const styleKey = JSON.stringify(style);
+  const layerRef = useRef<L.GeoJSON | null>(null);
 
-  // Leaflet Layer Management
+  // Leaflet Layer Lifecycle (Mount / Unmount)
   useEffect(() => {
-    if (!visible || !data || !map) return;
+    if (!visible || !data || !map) {
+      if (layerRef.current && map) {
+        try {
+          map.removeLayer(layerRef.current);
+        } catch {
+          // Safe unmount
+        }
+        layerRef.current = null;
+      }
+      return;
+    }
 
-    const layer = L.geoJSON(data, {
-      renderer: L.canvas(),
-      style: () => ({
+    try {
+      const layer = L.geoJSON(data, {
+        style: () => ({
+          ...style,
+          opacity,
+          fill: false,
+        }),
+        interactive: false,
+      }).addTo(map);
+
+      // Enforce non-interactive vector paths so clicks pass through to map/raster
+      layer.eachLayer((l: L.Layer) => {
+        const pathLayer = l as unknown as { getElement?: () => HTMLElement | null };
+        if (typeof pathLayer.getElement === "function") {
+          const el = pathLayer.getElement();
+          if (el) {
+            el.style.pointerEvents = "none";
+          }
+        }
+      });
+
+      layerRef.current = layer;
+    } catch (err) {
+      console.error(`Failed to add ${layerName} GeoJSON layer:`, err);
+    }
+
+    return () => {
+      if (layerRef.current && map) {
+        try {
+          map.removeLayer(layerRef.current);
+        } catch {
+          // Safe unmount
+        }
+        layerRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, data, visible]);
+
+  // Dynamic In-Place Style / Opacity Updates (No re-mount, 60 FPS slider response)
+  useEffect(() => {
+    if (layerRef.current) {
+      layerRef.current.setStyle({
         ...style,
         opacity,
         fill: false,
-        interactive: false,
-      }),
-      interactive: false,
-    } as L.GeoJSONOptions & { renderer?: L.Renderer }).addTo(map);
-
-    // Enforce non-interactive vector paths so clicks pass through to map/raster
-    layer.eachLayer((l: L.Layer) => {
-      const pathLayer = l as unknown as { getElement?: () => HTMLElement | null };
-      if (typeof pathLayer.getElement === "function") {
-        const el = pathLayer.getElement();
-        if (el) {
-          el.style.pointerEvents = "none";
-        }
-      }
-    });
-
-    return () => {
-      map.removeLayer(layer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, data, visible, opacity, styleKey]);
+      });
+    }
+  }, [opacity, style]);
 
   return null;
 }

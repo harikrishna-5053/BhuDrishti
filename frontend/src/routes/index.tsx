@@ -3,11 +3,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import MainLayout from "@/components/layout/MainLayout";
-import type { LogEntry, LogLevel } from "@/lib/types";
+import type { LogEntry, LogLevel, LayerState } from "@/lib/types";
 import BottomPane from "@/components/analytics/BottomPane";
 import NDVIStats from "@/components/analytics/NDVIStats";
-import type { LayerState } from "@/components/gis/GISMap";
 import MapOverlays, { MapLoading } from "@/components/gis/MapOverlays";
+import MapErrorBoundary from "@/components/gis/MapErrorBoundary";
 
 import UploadModal from "@/components/modals/UploadModal";
 import SettingsModal from "@/components/modals/SettingsModal";
@@ -137,34 +137,9 @@ function Dashboard() {
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       id: 1,
-      time: "10:42:11",
+      time: new Date().toLocaleTimeString("en-US", { hour12: false }),
       level: "INFO",
-      msg: "Reading Sentinel-2 dataset S2B_T44QMG_20260118",
-    },
-    { id: 2, time: "10:42:14", level: "INFO", msg: "Applying Sen2Cor atmospheric correction" },
-    {
-      id: 3,
-      time: "10:42:47",
-      level: "SUCCESS",
-      msg: "NDVI generated for tile T44QMG (10 m, EPSG:4326)",
-    },
-    {
-      id: 4,
-      time: "10:43:02",
-      level: "INFO",
-      msg: "Compositing periodic median mosaic (Jan 2026)",
-    },
-    {
-      id: 5,
-      time: "10:43:35",
-      level: "SUCCESS",
-      msg: "Mosaic completed · 4 tiles merged · 1.2 GB",
-    },
-    {
-      id: 6,
-      time: "10:44:01",
-      level: "WARN",
-      msg: "Tile T45QUE has 12% cloud cover — masked pixels excluded",
+      msg: "Local GeoTIFF viewer ready.",
     },
   ]);
 
@@ -363,25 +338,27 @@ function Dashboard() {
           <div className="relative flex-1">
             <ClientOnly fallback={<MapLoading />}>
               <Suspense fallback={<MapLoading />}>
-                <GISMap
-                  layers={layers}
-                  year={year}
-                  clicked={clicked}
-                  onClick={handleClick}
-                  onOutsideClick={handleOutsideClick}
-                  onCursor={(lat, lng, zoom) => setCursor({ lat, lng, zoom })}
-                  measureActive={measureMode}
-                  onToggleMeasure={handleToggleMeasure}
-                  swipeActive={swipeMode}
-                  onToggleSwipe={handleToggleSwipe}
-                  aoiActive={aoiMode}
-                  onToggleAOI={handleToggleAOI}
-                  onAOIFinished={handleAOIFinished}
-                  isAOIAnalyzing={isAOIAnalyzing}
-                  aoiProgress={aoiProgress}
-                  onCancelAOIAnalysis={handleCancelAOIAnalysis}
-                  bottomPaneExpanded={bottomPaneExpanded}
-                />
+                <MapErrorBoundary>
+                  <GISMap
+                    layers={layers}
+                    year={year}
+                    clicked={clicked}
+                    onClick={handleClick}
+                    onOutsideClick={handleOutsideClick}
+                    onCursor={(lat, lng, zoom) => setCursor({ lat, lng, zoom })}
+                    measureActive={measureMode}
+                    onToggleMeasure={handleToggleMeasure}
+                    swipeActive={swipeMode}
+                    onToggleSwipe={handleToggleSwipe}
+                    aoiActive={aoiMode}
+                    onToggleAOI={handleToggleAOI}
+                    onAOIFinished={handleAOIFinished}
+                    isAOIAnalyzing={isAOIAnalyzing}
+                    aoiProgress={aoiProgress}
+                    onCancelAOIAnalysis={handleCancelAOIAnalysis}
+                    bottomPaneExpanded={bottomPaneExpanded}
+                  />
+                </MapErrorBoundary>
               </Suspense>
             </ClientOnly>
 

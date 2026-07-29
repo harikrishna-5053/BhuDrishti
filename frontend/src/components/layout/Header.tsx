@@ -139,9 +139,9 @@ export default function Header({
         <span className="rounded bg-[var(--surface-2)] px-2 py-0.5 font-semibold text-foreground border border-border">
           z {cursor.zoom.toFixed(0)}
         </span>
-        <span className="hidden items-center gap-1.5 rounded-full border border-border bg-[var(--surface-1)] px-2 py-1 md:flex font-medium">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--success)] shadow-[0_0_6px_var(--success)]" />
-          Engine online
+        <span className="hidden items-center gap-1.5 rounded-full border border-border bg-[var(--surface-1)] px-2 py-1 md:flex font-medium text-amber-500/90 dark:text-amber-400">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />
+          Processing backend not connected
         </span>
       </div>
     </header>

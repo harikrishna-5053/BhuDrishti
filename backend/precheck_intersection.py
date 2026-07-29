@@ -2,9 +2,6 @@ import zipfile
 import tempfile
 import os
 import xml.etree.ElementTree as ET
-from shapely.geometry import Polygon
-from pyproj import Transformer
-import geopandas as gpd
 
 
 # ==========================================================
@@ -108,6 +105,8 @@ def _read_geocoding(xml_file):
 # ==========================================================
 
 def _build_polygon(meta):
+    from shapely.geometry import Polygon
+    from pyproj import Transformer
 
     ulx = meta["ulx"]
     uly = meta["uly"]
@@ -120,7 +119,6 @@ def _build_polygon(meta):
 
     urx = ulx + (ncols * xdim)
     lly = uly + (nrows * ydim)
-
 
     corners = [
         (ulx, uly),
@@ -146,6 +144,7 @@ def _build_polygon(meta):
 # ==========================================================
 
 def check_zip_intersection(zip_path, india_shp, log_file):
+    import geopandas as gpd
 
     xml_path = _find_mtd_xml_in_zip(zip_path)
 

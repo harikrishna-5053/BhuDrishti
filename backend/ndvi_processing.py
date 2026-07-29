@@ -1,8 +1,18 @@
-from osgeo import gdal
-import numpy as np
+try:
+    from osgeo import gdal
+except ImportError:
+    try:
+        import gdal
+    except ImportError:
+        gdal = None
+try:
+    import numpy as np
+except ImportError:
+    np = None
 import time
 
-gdal.UseExceptions()
+if gdal and hasattr(gdal, "UseExceptions"):
+    gdal.UseExceptions()
 
 # ==========================================================
 # NDVI GENERATION MODULE

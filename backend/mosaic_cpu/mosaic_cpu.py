@@ -1,7 +1,16 @@
 import os
-import numpy as np
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
-from osgeo import osr
+try:
+    from osgeo import osr
+except ImportError:
+    try:
+        import osr
+    except ImportError:
+        osr = None
 
 from .geotiff_reader import GeoTiffReader
 from .geotiff_writer import GeoTiffWriter

@@ -69,8 +69,12 @@ export default function NDVIGeoTIFFLayer({ raster, opacity, visible }: NDVIGeoTI
     }
 
     return () => {
-      if (layerRef.current) {
-        map.removeLayer(layerRef.current);
+      if (layerRef.current && map) {
+        try {
+          map.removeLayer(layerRef.current);
+        } catch {
+          // Safe unmount
+        }
         layerRef.current = null;
       }
     };

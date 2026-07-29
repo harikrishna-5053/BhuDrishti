@@ -40,6 +40,7 @@ dist-ssr
 # ===================================================
 
 # Large runtime data
+data/
 All_Zips/
 Inputs/
 Outputs/

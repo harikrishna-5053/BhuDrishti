@@ -22,6 +22,7 @@ import type { LayerState } from "@/components/gis/GISMap";
 import type { LogLevel } from "@/lib/types";
 import { useGeoTIFFStore } from "@/stores/geotiff-store";
 import type { ColorRampPreset } from "@/lib/ndvi";
+import { toast } from "sonner";
 
 const LAYER_META: {
   key: keyof LayerState;
@@ -82,9 +83,10 @@ export default function Sidebar({
 
   const handleGenerateNDVI = () => {
     if (!isGenerateEnabled) return;
+    toast.info("NDVI generation backend is not connected yet. You can currently load and analyse local GeoTIFF files.");
     onPushLog(
       "INFO",
-      `NDVI Generation: Input path ("${inputPath.trim()}") and output path ("${outputPath.trim()}") configured. (Backend processing not connected yet)`,
+      "NDVI generation backend is not connected yet. You can currently load and analyse local GeoTIFF files.",
     );
     setIsPathPanelOpen(false);
   };
@@ -307,31 +309,12 @@ function NDVIGenerationSection({ onOpenPaths }: { onOpenPaths: () => void }) {
  * Section 2: PROCESS STATUS
  */
 function ProcessingSection({ onPushLog }: { onPushLog: (l: LogLevel, m: string) => void }) {
-  const [running, setRunning] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
-
-  useEffect(() => {
-    if (!running) return;
-    const t = setInterval(() => {
-      setProgress((p) => {
-        if (p >= 100) {
-          clearInterval(t);
-          onPushLog("SUCCESS", `${labelFor(running)} completed`);
-          setRunning(null);
-          return 0;
-        }
-        return p + 8;
-      });
-    }, 220);
-    return () => clearInterval(t);
-  }, [running, onPushLog]);
-
-  const labelFor = (id: string) => PIPELINE.find((p) => p.id === id)?.label ?? id;
-
-  const start = (id: string) => {
-    onPushLog("INFO", `${labelFor(id)} started`);
-    setRunning(id);
-    setProgress(4);
+  const handleClickStep = (label: string) => {
+    toast.info("NDVI generation backend is not connected yet. You can currently load and analyse local GeoTIFF files.");
+    onPushLog(
+      "INFO",
+      "NDVI generation backend is not connected yet. You can currently load and analyse local GeoTIFF files.",
+    );
   };
 
   return (
@@ -339,18 +322,12 @@ function ProcessingSection({ onPushLog }: { onPushLog: (l: LogLevel, m: string) 
       <SectionHeader icon={Play} title="Process Status" count="pipeline" />
       <div className="space-y-1.5">
         {PIPELINE.map((step, i) => {
-          const active = running === step.id;
           const Icon = step.icon;
           return (
             <button
               key={step.id}
-              onClick={() => start(step.id)}
-              disabled={!!running}
-              className={`group flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition cursor-pointer ${
-                active
-                  ? "border-primary/80 bg-primary/10 shadow-sm"
-                  : "border-border bg-[var(--surface-0)] hover:border-primary/60 hover:bg-[var(--surface-1)] shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
-              } ${running && !active ? "opacity-50" : ""}`}
+              onClick={() => handleClickStep(step.label)}
+              className="group flex w-full items-center gap-2.5 rounded-lg border border-border bg-[var(--surface-0)] hover:border-primary/60 hover:bg-[var(--surface-1)] px-2.5 py-2 text-left transition cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
             >
               <div className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-[var(--surface-2)] font-mono text-[10px] font-semibold text-foreground border border-border">
                 {String(i + 1).padStart(2, "0")}
@@ -361,27 +338,10 @@ function ProcessingSection({ onPushLog }: { onPushLog: (l: LogLevel, m: string) 
                     <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
                     <span className="truncate">{step.label}</span>
                   </div>
-                  {active && (
-                    <span className="font-mono text-[11px] font-bold text-primary shrink-0 animate-pulse">
-                      {Math.min(100, Math.round(progress))}%
-                    </span>
-                  )}
                 </div>
                 <div className="font-mono text-[10px] text-muted-foreground">{step.hint}</div>
-                {active && (
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--surface-3)] border border-border/40">
-                    <div
-                      className="h-full rounded-full bg-primary transition-[width] duration-200 shadow-sm"
-                      style={{ width: `${Math.min(100, Math.round(progress))}%` }}
-                    />
-                  </div>
-                )}
               </div>
-              {active ? (
-                <Loader2 className="h-3.5 w-3.5 shrink-0 text-primary animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />
-              )}
+              <Play className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
             </button>
           );
         })}

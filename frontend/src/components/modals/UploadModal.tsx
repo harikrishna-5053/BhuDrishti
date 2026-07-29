@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X, Upload, FileCheck, AlertCircle } from "lucide-react";
 import type { LogLevel } from "@/lib/types";
+import { toast } from "sonner";
 
 interface UploadModalProps {
   open: boolean;
@@ -45,23 +46,13 @@ export default function UploadModal({ open, onClose, onPushLog }: UploadModalPro
   };
 
   const handleUpload = () => {
-    if (!file || uploading) return;
-    setUploading(true);
-    setProgress(10);
-    onPushLog("INFO", `Started Sentinel-2 NDVI processing for ${file.name}`);
-
-    const interval = setInterval(() => {
-      setProgress((p) => {
-        if (p >= 100) {
-          clearInterval(interval);
-          setUploading(false);
-          onPushLog("SUCCESS", `NDVI generation completed for ${file.name}`);
-          onClose();
-          return 0;
-        }
-        return p + 25;
-      });
-    }, 300);
+    if (!file) return;
+    toast.info("NDVI generation backend is not connected yet. You can currently load and analyse local GeoTIFF files.");
+    onPushLog(
+      "INFO",
+      "NDVI generation backend is not connected yet. You can currently load and analyse local GeoTIFF files.",
+    );
+    onClose();
   };
 
   const handleCloseModal = () => {
@@ -161,17 +152,16 @@ export default function UploadModal({ open, onClose, onPushLog }: UploadModalPro
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3 bg-[var(--surface-1)]">
           <button
             onClick={handleCloseModal}
-            disabled={uploading}
             className="rounded-md border border-border px-4 py-2 text-xs font-semibold text-foreground hover:bg-[var(--surface-2)] transition disabled:opacity-50 cursor-pointer"
           >
             Cancel
           </button>
           <button
             onClick={handleUpload}
-            disabled={!file || uploading}
+            disabled={!file}
             className="rounded-md bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-md hover:bg-primary/90 transition disabled:opacity-50 cursor-pointer"
           >
-            {uploading ? "Processing..." : "Process Dataset"}
+            Process Dataset
           </button>
         </div>
       </div>

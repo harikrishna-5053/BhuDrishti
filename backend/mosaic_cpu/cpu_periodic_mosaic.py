@@ -4,8 +4,15 @@ from datetime import datetime
 
 from mosaic_cpu.mosaic_cpu import MosaicCPU
 
-from osgeo import gdal
-gdal.SetCacheMax(4096)
+try:
+    from osgeo import gdal
+except ImportError:
+    try:
+        import gdal
+    except ImportError:
+        gdal = None
+if gdal and hasattr(gdal, "SetCacheMax"):
+    gdal.SetCacheMax(4096)
 
 
 def get_date_from_filename(filename):

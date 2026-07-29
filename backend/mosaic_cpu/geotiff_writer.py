@@ -1,5 +1,14 @@
-from osgeo import gdal
-import numpy as np
+try:
+    from osgeo import gdal
+except ImportError:
+    try:
+        import gdal
+    except ImportError:
+        gdal = None
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
 
 
@@ -18,7 +27,7 @@ class GeoTiffWriter:
             width,
             height,
             bands=1,
-            dtype=gdal.GDT_Float32
+            dtype=getattr(gdal, "GDT_Float32", 6)
     ):
 
 

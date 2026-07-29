@@ -1,11 +1,23 @@
 import os
-from osgeo import gdal
-import numpy as np
+try:
+    from osgeo import gdal
+except ImportError:
+    try:
+        import gdal
+    except ImportError:
+        gdal = None
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
-import matplotlib
-matplotlib.use("Agg")   # FIX QT ERROR
-
-import matplotlib.pyplot as plt
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+except ImportError:
+    matplotlib = None
+    plt = None
 
 
 

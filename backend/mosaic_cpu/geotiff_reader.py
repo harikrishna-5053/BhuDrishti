@@ -1,6 +1,20 @@
-from osgeo import gdal, osr
-import numpy as np
-from pyproj import Transformer
+try:
+    from osgeo import gdal, osr
+except ImportError:
+    try:
+        import gdal
+        import osr
+    except ImportError:
+        gdal = None
+        osr = None
+try:
+    import numpy as np
+except ImportError:
+    np = None
+try:
+    from pyproj import Transformer
+except ImportError:
+    Transformer = None
 
 
 
