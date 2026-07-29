@@ -1,0 +1,25 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+venv/
+
+# Logs
+*.log
+logs/
+
+# Generated outputs
+OUTPUT/
+Outputs/
+*.tif
+*.tiff
+
+# Temporary files
+TEMP/
+temp/
+
+# Satellite data
+*.zip
+*.SAFE/

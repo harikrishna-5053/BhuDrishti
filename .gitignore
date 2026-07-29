@@ -34,3 +34,38 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# ===================================================
+# BhuDrishti Backend
+# ===================================================
+
+# Large runtime data
+All_Zips/
+Inputs/
+Outputs/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# Frontend build cache
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Generated GIS files
+*.tif
+*.tiff
+*.aux.xml
+*.ovr
+*.msk
+*.vrt
+
+# Windows
+Thumbs.db
+desktop.ini
