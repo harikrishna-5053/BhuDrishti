@@ -85,10 +85,8 @@ def generate_ndvi(red_path, nir_path, scl_resampled, logger=None):
             np.squeeze(scl_resampled.ReadAsArray())
         )
 
-        # SCL classes to mask as invalid/nodata (-9999.0):
-        # 0: No Data, 1: Saturated/Defective, 2: Dark Area / Cast Shadows,
-        # 3: Cloud Shadows, 8: Cloud Medium Prob, 9: Cloud High Prob, 10: Thin Cirrus
-        invalid_scl = cp.array([0, 1, 2, 3, 8, 9, 10], dtype=cp.uint8)
+        from utils import INVALID_SCL_CLASSES
+        invalid_scl = cp.array(list(INVALID_SCL_CLASSES), dtype=cp.uint8)
         valid_mask &= ~cp.isin(scl, invalid_scl)
 
         # ==================================================

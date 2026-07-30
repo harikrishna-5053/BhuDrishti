@@ -10,6 +10,7 @@ try:
 except ImportError:
     np = None
 import time
+from utils import INVALID_SCL_CLASSES
 
 if gdal and hasattr(gdal, "UseExceptions"):
     gdal.UseExceptions()
@@ -53,10 +54,7 @@ def generate_ndvi(red_path, nir_path, scl_resampled, logger=None):
         red_nodata = red_band.GetNoDataValue()
         nir_nodata = nir_band.GetNoDataValue()
 
-        # SCL classes to mask as invalid/nodata (-9999.0):
-        # 0: No Data, 1: Saturated/Defective, 2: Dark Area / Cast Shadows,
-        # 3: Cloud Shadows, 8: Cloud Medium Prob, 9: Cloud High Prob, 10: Thin Cirrus
-        invalid_scl = {0, 1, 2, 3, 8, 9, 10}
+        invalid_scl = INVALID_SCL_CLASSES
 
         ndvi = np.full((height, width), -9999.0, dtype=np.float32)
         compute_start = time.perf_counter()

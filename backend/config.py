@@ -2,6 +2,12 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 class ConfigurationError(Exception):
     """Custom exception raised for invalid BhuDrishti pipeline configurations."""
     pass
