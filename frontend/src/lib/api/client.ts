@@ -93,6 +93,33 @@ export interface JobResultsResponse {
   results: ResultItem[];
 }
 
+export interface AOIStatsValue {
+  result_id: string;
+  filename: string;
+  date: string;
+  valid_count: number;
+  nodata_count: number;
+  min_ndvi: number;
+  max_ndvi: number;
+  mean_ndvi: number;
+  median_ndvi: number;
+  std_dev: number;
+  valid_pixel_count?: number;
+  nodata_pixel_count?: number;
+  minimum?: number;
+  maximum?: number;
+  mean?: number;
+  median?: number;
+  standard_deviation?: number;
+  raster_crs?: string;
+  status?: string;
+  message?: string;
+}
+
+export interface AOIAnalyticsResponse {
+  series: AOIStatsValue[];
+}
+
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
   const res = await fetch(url, {
@@ -150,13 +177,14 @@ export const api = {
       }),
     }),
 
-  submitJob: (inputRelativePath: string, outputRelativePath: string, createPeriodicMosaic: boolean = true): Promise<{ job_id: string; status: string }> =>
+  submitJob: (inputRelativePath: string, outputRelativePath: string, createPeriodicMosaic: boolean = false): Promise<{ job_id: string; status: string }> =>
     request<{ job_id: string; status: string }>("/api/jobs", {
       method: "POST",
       body: JSON.stringify({
         input_relative_path: inputRelativePath,
         output_relative_path: outputRelativePath,
         create_periodic_mosaic: createPeriodicMosaic,
+        create_mosaic: createPeriodicMosaic,
       }),
     }),
 
@@ -178,4 +206,13 @@ export const api = {
 
   getDownloadUrl: (jobId: string, resultId: string): string =>
     `${API_BASE_URL}/api/jobs/${encodeURIComponent(jobId)}/results/${encodeURIComponent(resultId)}/download`,
+
+  getAOIAnalytics: (resultIds: string[], geojson: any): Promise<AOIAnalyticsResponse> =>
+    request<AOIAnalyticsResponse>("/api/analytics/aoi", {
+      method: "POST",
+      body: JSON.stringify({
+        result_ids: resultIds,
+        geojson: geojson,
+      }),
+    }),
 };

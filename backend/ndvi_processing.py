@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Tuple, Any, Optional
+from typing import Tuple, Any, Optional, Callable, Dict
 
 try:
     from osgeo import gdal

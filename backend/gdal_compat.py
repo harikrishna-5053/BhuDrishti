@@ -34,9 +34,9 @@ if not HAS_NATIVE_GDAL:
         def ReadAsArray(self, xoff=0, yoff=0, win_xsize=None, win_ysize=None):
             ds = self.ds_adapter.ds
             if win_xsize is None or win_ysize is None:
-                return ds.read(self.band_idx)
+                return np.ascontiguousarray(ds.read(self.band_idx))
             window = rasterio.windows.Window(xoff, yoff, win_xsize, win_ysize)
-            return ds.read(self.band_idx, window=window)
+            return np.ascontiguousarray(ds.read(self.band_idx, window=window))
 
         def WriteArray(self, arr, xoff, yoff):
             ds = self.ds_adapter.ds

@@ -355,7 +355,18 @@ export async function calculateAOIStatisticsAsync(
       if (sampledForMedian.length < maxMedianSamples) {
         sampledForMedian.push(val);
       } else {
-        // Histogram binning for ultra-large AOIs
+        if (sampledForMedian.length === maxMedianSamples) {
+          // Bin all previously collected samples so no early samples are lost
+          for (const sVal of sampledForMedian) {
+            const bIdx = Math.min(
+              AOI_ANALYSIS_CONFIG.HISTOGRAM_BINS - 1,
+              Math.max(0, Math.floor(((sVal + 1.0) / 2.0) * AOI_ANALYSIS_CONFIG.HISTOGRAM_BINS)),
+            );
+            histogramBins[bIdx]++;
+          }
+          sampledForMedian.push(val);
+        }
+        // Bin current sample into histogram
         const binIndex = Math.min(
           AOI_ANALYSIS_CONFIG.HISTOGRAM_BINS - 1,
           Math.max(0, Math.floor(((val + 1.0) / 2.0) * AOI_ANALYSIS_CONFIG.HISTOGRAM_BINS)),
@@ -383,7 +394,7 @@ export async function calculateAOIStatisticsAsync(
 
   // 13. Calculate Median
   let median = 0;
-  if (sampledForMedian.length < maxMedianSamples) {
+  if (sampledForMedian.length <= maxMedianSamples) {
     sampledForMedian.sort((a, b) => a - b);
     const mid = Math.floor(sampledForMedian.length / 2);
     median =

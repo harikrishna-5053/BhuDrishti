@@ -12,6 +12,18 @@ class ConfigurationError(Exception):
     """Custom exception raised for invalid BhuDrishti pipeline configurations."""
     pass
 
+def parse_bool_env(val: str | None, default: bool = False) -> bool:
+    if val is None:
+        return default
+    cleaned = str(val).strip().lower()
+    if cleaned in ("true", "1", "yes", "on"):
+        return True
+    if cleaned in ("false", "0", "no", "off"):
+        return False
+    raise ConfigurationError(
+        f"Invalid boolean environment variable value: '{val}'. Expected true, 1, yes, on, false, 0, no, off."
+    )
+
 @dataclass
 class PipelineConfig:
     input_zip_directory: Path
@@ -21,7 +33,7 @@ class PipelineConfig:
     processed_files_log: Path
     skipped_files_log: Path
     processing_mode: str = "cpu"
-    create_periodic_mosaic: bool = True
+    create_periodic_mosaic: bool = False
     mosaic_method: str = "maximum"
     block_size: int = 2048
     nodata_value: float = -9999.0
@@ -45,6 +57,9 @@ class PipelineConfig:
         temp_dir = Path(os.environ.get("BHUDRISHTI_TEMP_DIR", data_dir / "temp"))
         processing_mode = os.environ.get("BHUDRISHTI_PROCESSING_MODE", "cpu").lower()
 
+        env_mosaic = os.environ.get("BHUDRISHTI_CREATE_MOSAIC") or os.environ.get("CREATE_PERIODIC_MOSAIC")
+        create_mosaic = parse_bool_env(env_mosaic, default=False)
+
         logs_dir = output_dir / "logs"
         processed_log = logs_dir / "processing_records.jsonl"
         skipped_log = logs_dir / "skipped_files.txt"
@@ -57,7 +72,7 @@ class PipelineConfig:
             processed_files_log=processed_log,
             skipped_files_log=skipped_log,
             processing_mode=processing_mode,
-            create_periodic_mosaic=True,
+            create_periodic_mosaic=create_mosaic,
             mosaic_method="maximum",
             block_size=2048,
             nodata_value=-9999.0,

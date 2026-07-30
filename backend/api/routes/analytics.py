@@ -18,7 +18,7 @@ except ImportError:
         import gdal
         import osr
     except ImportError:
-        gdal = None
+        from gdal_compat import gdal
         osr = None
 
 from api.job_manager import get_job_manager
@@ -38,7 +38,7 @@ from mosaic_cpu.cpu_periodic_mosaic import get_date_from_filename
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 
-def _find_result_file(result_id: str) -> Tuple_Path_Dict:
+def _find_result_file(result_id: str) -> Tuple[Path, Dict[str, Any]]:
     manager = get_job_manager()
     with manager._lock:
         for job_id, job in manager._jobs.items():
@@ -102,8 +102,42 @@ def get_point_analytics(req: PointAnalyticsRequest):
     return PointAnalyticsResponse(lat=req.lat, lon=req.lon, series=series)
 
 
+import pyproj
+import rasterio
+from rasterio.features import geometry_mask
+from shapely.geometry import shape, Polygon, MultiPolygon
+from shapely.ops import transform
+
 @router.post("/aoi", response_model=AOIAnalyticsResponse)
 def get_aoi_analytics(req: AOIAnalyticsRequest):
+    if not req.geojson:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="AOI GeoJSON polygon is required.")
+
+    # 1. Geometry Validation
+    try:
+        geom = shape(req.geojson)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid GeoJSON polygon geometry: {e}")
+
+    if geom is None or geom.is_empty:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Submitted AOI polygon geometry is empty.")
+
+    if not geom.is_valid:
+        geom = geom.buffer(0)
+
+    if geom.is_empty or getattr(geom, "area", 0) <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Submitted AOI polygon has zero area or invalid bounds.")
+
+    if geom.geom_type not in ("Polygon", "MultiPolygon"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported geometry type '{geom.geom_type}'. Must be Polygon or MultiPolygon.")
+
+    # Check distinct vertex count
+    if geom.geom_type == "Polygon":
+        ext_coords = list(geom.exterior.coords)
+        distinct_coords = set(ext_coords)
+        if len(distinct_coords) < 3 or len(ext_coords) < 4:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="AOI polygon must contain at least 3 distinct vertices.")
+
     series: List[AOIStatsValue] = []
 
     for res_id in req.result_ids:
@@ -116,27 +150,169 @@ def get_aoi_analytics(req: AOIAnalyticsRequest):
             continue
 
         try:
+            # 2. CRS extraction & transformation (EPSG:4326 -> raster CRS)
+            proj_wkt = ds.GetProjection()
+            if proj_wkt:
+                try:
+                    raster_crs = pyproj.CRS.from_wkt(proj_wkt)
+                except Exception:
+                    raster_crs = pyproj.CRS.from_epsg(4326)
+            else:
+                raster_crs = pyproj.CRS.from_epsg(4326)
+
+            raster_crs_str = raster_crs.to_string() if raster_crs else "EPSG:4326"
+            src_crs = pyproj.CRS.from_epsg(4326)
+
+            if src_crs != raster_crs:
+                try:
+                    transformer = pyproj.Transformer.from_crs(src_crs, raster_crs, always_xy=True)
+                    transformed_geom = transform(transformer.transform, geom)
+                except Exception as tr_err:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Failed to transform AOI polygon to raster CRS: {tr_err}")
+            else:
+                transformed_geom = geom
+
+            if not transformed_geom.is_valid:
+                transformed_geom = transformed_geom.buffer(0)
+
+            if transformed_geom.is_empty or getattr(transformed_geom, "area", 0) <= 0:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Transformed AOI polygon is empty or invalid in raster CRS.")
+
+            # 3. Calculate bounding window in raster CRS
+            min_x, min_y, max_x, max_y = transformed_geom.bounds
+            gt = ds.GetGeoTransform()
+            origin_x = gt[0]
+            pixel_w = abs(gt[1])
+            origin_y = gt[3]
+            pixel_h = abs(gt[5])
+
+            if pixel_w <= 0 or pixel_h <= 0:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid raster pixel resolution.")
+
+            col1 = int(math.floor((min_x - origin_x) / pixel_w))
+            col2 = int(math.ceil((max_x - origin_x) / pixel_w))
+            row1 = int(math.floor((origin_y - max_y) / pixel_h))
+            row2 = int(math.ceil((origin_y - min_y) / pixel_h))
+
+            min_col = max(0, min(col1, col2))
+            max_col = min(ds.RasterXSize - 1, max(col1, col2))
+            min_row = max(0, min(row1, row2))
+            max_row = min(ds.RasterYSize - 1, max(row1, row2))
+
+            # 4. Check for raster overlap
+            if min_col > max_col or min_row > max_row or min_col >= ds.RasterXSize or min_row >= ds.RasterYSize:
+                series.append(AOIStatsValue(
+                    result_id=res_id,
+                    filename=res_data["filename"],
+                    date=date_str,
+                    valid_count=0,
+                    nodata_count=0,
+                    min_ndvi=-9999.0,
+                    max_ndvi=-9999.0,
+                    mean_ndvi=-9999.0,
+                    median_ndvi=-9999.0,
+                    std_dev=0.0,
+                    valid_pixel_count=0,
+                    nodata_pixel_count=0,
+                    minimum=None,
+                    maximum=None,
+                    mean=None,
+                    median=None,
+                    standard_deviation=None,
+                    raster_crs=raster_crs_str,
+                    status="no_overlap",
+                    message="The selected AOI does not overlap the raster."
+                ))
+                continue
+
+            win_w = max_col - min_col + 1
+            win_h = max_row - min_row + 1
+
+            # Read only the raster window
             band = ds.GetRasterBand(1)
-            arr = band.ReadAsArray()
-            nodata = band.GetNoDataValue()
+            arr = band.ReadAsArray(min_col, min_row, win_w, win_h).astype(np.float32)
 
-            if nodata is not None:
-                valid_mask = (abs(arr - nodata) > 1e-4) & (abs(arr - -9999.0) > 1e-4) & (arr >= -1.0) & (arr <= 1.0)
+            win_transform = rasterio.transform.Affine(
+                pixel_w, 0.0, origin_x + min_col * pixel_w,
+                0.0, -pixel_h, origin_y - min_row * pixel_h
+            )
+
+            # 5. Exact polygon rasterization mask (pixel-center inclusion rule)
+            poly_mask = geometry_mask([transformed_geom], out_shape=(win_h, win_w), transform=win_transform, invert=True)
+
+            poly_pixels = arr[poly_mask]
+            if poly_pixels.size == 0:
+                series.append(AOIStatsValue(
+                    result_id=res_id,
+                    filename=res_data["filename"],
+                    date=date_str,
+                    valid_count=0,
+                    nodata_count=0,
+                    min_ndvi=-9999.0,
+                    max_ndvi=-9999.0,
+                    mean_ndvi=-9999.0,
+                    median_ndvi=-9999.0,
+                    std_dev=0.0,
+                    valid_pixel_count=0,
+                    nodata_pixel_count=0,
+                    minimum=None,
+                    maximum=None,
+                    mean=None,
+                    median=None,
+                    standard_deviation=None,
+                    raster_crs=raster_crs_str,
+                    status="no_overlap",
+                    message="The selected AOI does not overlap the raster."
+                ))
+                continue
+
+            # 6. Exclude nodata (-9999, raster nodata, NaN, +/-inf, out of range [-1.0, 1.0])
+            raster_nodata = band.GetNoDataValue()
+
+            is_finite = np.isfinite(poly_pixels)
+            is_valid_range = (poly_pixels >= -1.0) & (poly_pixels <= 1.0)
+            not_nodata9999 = np.abs(poly_pixels - -9999.0) > 1e-4
+
+            if raster_nodata is not None:
+                not_raster_nodata = np.abs(poly_pixels - raster_nodata) > 1e-4
+                valid_mask = is_finite & is_valid_range & not_nodata9999 & not_raster_nodata
             else:
-                valid_mask = (abs(arr - -9999.0) > 1e-4) & (arr >= -1.0) & (arr <= 1.0)
+                valid_mask = is_finite & is_valid_range & not_nodata9999
 
-            valid_vals = arr[valid_mask]
-            valid_cnt = int(valid_vals.size)
-            nodata_cnt = int(arr.size - valid_cnt)
+            valid_pixels = poly_pixels[valid_mask]
+            valid_cnt = int(valid_pixels.size)
+            nodata_cnt = int(poly_pixels.size - valid_cnt)
 
-            if valid_cnt > 0:
-                min_v = float(np.min(valid_vals))
-                max_v = float(np.max(valid_vals))
-                mean_v = float(np.mean(valid_vals))
-                med_v = float(np.median(valid_vals))
-                std_v = float(np.std(valid_vals))
-            else:
-                min_v = max_v = mean_v = med_v = std_v = -9999.0
+            if valid_cnt == 0:
+                series.append(AOIStatsValue(
+                    result_id=res_id,
+                    filename=res_data["filename"],
+                    date=date_str,
+                    valid_count=0,
+                    nodata_count=nodata_cnt,
+                    min_ndvi=-9999.0,
+                    max_ndvi=-9999.0,
+                    mean_ndvi=-9999.0,
+                    median_ndvi=-9999.0,
+                    std_dev=0.0,
+                    valid_pixel_count=0,
+                    nodata_pixel_count=nodata_cnt,
+                    minimum=None,
+                    maximum=None,
+                    mean=None,
+                    median=None,
+                    standard_deviation=None,
+                    raster_crs=raster_crs_str,
+                    status="no_valid_pixels",
+                    message="The selected AOI contains no valid NDVI pixels."
+                ))
+                continue
+
+            min_v = float(np.min(valid_pixels))
+            max_v = float(np.max(valid_pixels))
+            mean_v = float(np.mean(valid_pixels))
+            med_v = float(np.median(valid_pixels))
+            std_v = float(np.std(valid_pixels))
 
             series.append(AOIStatsValue(
                 result_id=res_id,
@@ -144,11 +320,21 @@ def get_aoi_analytics(req: AOIAnalyticsRequest):
                 date=date_str,
                 valid_count=valid_cnt,
                 nodata_count=nodata_cnt,
-                min_ndvi=min_v,
-                max_ndvi=max_v,
-                mean_ndvi=mean_v,
-                median_ndvi=med_v,
-                std_dev=std_v
+                min_ndvi=round(min_v, 4),
+                max_ndvi=round(max_v, 4),
+                mean_ndvi=round(mean_v, 4),
+                median_ndvi=round(med_v, 4),
+                std_dev=round(std_v, 4),
+                valid_pixel_count=valid_cnt,
+                nodata_pixel_count=nodata_cnt,
+                minimum=round(min_v, 4),
+                maximum=round(max_v, 4),
+                mean=round(mean_v, 4),
+                median=round(med_v, 4),
+                standard_deviation=round(std_v, 4),
+                raster_crs=raster_crs_str,
+                status="success",
+                message="AOI analysis completed successfully."
             ))
         finally:
             ds = None

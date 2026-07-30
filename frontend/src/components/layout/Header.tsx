@@ -45,6 +45,7 @@ export default function Header({
   swipeActive,
   swipeDisabled,
   aoiActive,
+  aoiDisabled,
   onToggleMeasure,
   onToggleSwipe,
   onToggleAOI,
@@ -63,6 +64,7 @@ export default function Header({
   swipeActive?: boolean;
   swipeDisabled?: boolean;
   aoiActive?: boolean;
+  aoiDisabled?: boolean;
   onToggleMeasure?: () => void;
   onToggleSwipe?: () => void;
   onToggleAOI?: () => void;
@@ -148,9 +150,10 @@ export default function Header({
         />
         <IconBtn
           icon={Crop}
-          label="AOI Analysis"
+          label={aoiDisabled ? "Load or generate an NDVI GeoTIFF to enable AOI analysis" : "AOI Analysis"}
           active={aoiActive}
-          onClick={onToggleAOI}
+          disabled={aoiDisabled}
+          onClick={aoiDisabled ? undefined : onToggleAOI}
         />
         <div className="mx-1 h-5 w-px bg-border" />
         <IconBtn

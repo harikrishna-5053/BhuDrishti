@@ -4,6 +4,7 @@ import type { ColorRampPreset } from "@/lib/ndvi";
 
 interface GeoTIFFState {
   raster: LoadedNDVIRaster | null;
+  activeResultId: string | null;
   visible: boolean;
   opacity: number;
   loading: boolean;
@@ -13,7 +14,8 @@ interface GeoTIFFState {
   zoomTrigger: number;
   colorRamp: ColorRampPreset;
 
-  setRaster: (raster: LoadedNDVIRaster | null) => void;
+  setRaster: (raster: LoadedNDVIRaster | null, resultId?: string | null) => void;
+  setActiveResultId: (id: string | null) => void;
   setVisible: (visible: boolean) => void;
   setOpacity: (opacity: number) => void;
   setLoading: (loading: boolean, stage?: string) => void;
@@ -26,6 +28,7 @@ interface GeoTIFFState {
 
 export const useGeoTIFFStore = create<GeoTIFFState>((set) => ({
   raster: null,
+  activeResultId: null,
   visible: true,
   opacity: 0.85,
   loading: false,
@@ -35,15 +38,18 @@ export const useGeoTIFFStore = create<GeoTIFFState>((set) => ({
   zoomTrigger: 0,
   colorRamp: "ndvi",
 
-  setRaster: (raster) =>
+  setRaster: (raster, resultId = null) =>
     set({
       raster,
+      activeResultId: resultId ?? null,
       visible: true,
       error: null,
       loading: false,
       selectedPixel: null,
       zoomTrigger: Date.now(),
     }),
+
+  setActiveResultId: (activeResultId) => set({ activeResultId }),
 
   setVisible: (visible) => set({ visible }),
 
@@ -62,6 +68,7 @@ export const useGeoTIFFStore = create<GeoTIFFState>((set) => ({
   clearRaster: () =>
     set({
       raster: null,
+      activeResultId: null,
       selectedPixel: null,
       error: null,
       loading: false,

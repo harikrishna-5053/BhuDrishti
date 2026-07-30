@@ -33,7 +33,8 @@ class CreateDirectoryRequest(BaseModel):
 class CreateJobRequest(BaseModel):
     input_relative_path: str = ""
     output_relative_path: str = ""
-    create_periodic_mosaic: bool = True
+    create_periodic_mosaic: bool = False
+    create_mosaic: Optional[bool] = None
 
 class JobSummary(BaseModel):
     job_id: str
@@ -111,6 +112,16 @@ class AOIStatsValue(BaseModel):
     mean_ndvi: float
     median_ndvi: float
     std_dev: float
+    valid_pixel_count: Optional[int] = None
+    nodata_pixel_count: Optional[int] = None
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
+    mean: Optional[float] = None
+    median: Optional[float] = None
+    standard_deviation: Optional[float] = None
+    raster_crs: Optional[str] = None
+    status: str = "success"
+    message: str = ""
 
 class AOIAnalyticsResponse(BaseModel):
     series: List[AOIStatsValue]

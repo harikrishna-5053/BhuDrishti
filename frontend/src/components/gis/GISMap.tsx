@@ -341,6 +341,7 @@ export default function GISMap({
   swipeActive,
   onToggleSwipe,
   aoiActive,
+  aoiDisabled,
   onToggleAOI,
   onAOIFinished,
   isAOIAnalyzing,
@@ -359,6 +360,7 @@ export default function GISMap({
   swipeActive?: boolean;
   onToggleSwipe?: () => void;
   aoiActive?: boolean;
+  aoiDisabled?: boolean;
   onToggleAOI?: () => void;
   onAOIFinished?: (points: [number, number][]) => void;
   isAOIAnalyzing?: boolean;
@@ -396,15 +398,15 @@ export default function GISMap({
     }
   }, [measureActive]);
 
-  // Reset AOI state when tool is deactivated
+  // Clear all AOI state when raster is removed or AOI tool is deactivated
   useEffect(() => {
-    if (!aoiActive) {
+    if (!aoiActive || aoiDisabled) {
       setAoiPoints([]);
       setAoiUndoHistory([]);
       setAoiRedoHistory([]);
       setIsAoiFinished(false);
     }
-  }, [aoiActive]);
+  }, [aoiActive, aoiDisabled]);
 
   // Handle map click for measurement
   const handleMeasureClick = (lat: number, lng: number) => {
@@ -501,7 +503,7 @@ export default function GISMap({
   ]);
 
   const handleAOIClick = (lat: number, lng: number) => {
-    if (isAOIAnalyzing) return;
+    if (isAOIAnalyzing || aoiDisabled) return;
     const newPoint: L.LatLngTuple = [lat, lng];
     setAoiPoints((prev) => {
       const next = [...prev, newPoint];
@@ -1072,6 +1074,7 @@ export default function GISMap({
               <div className="text-[10px] text-muted-foreground leading-tight">
                 Open <span className="font-semibold text-primary">Load NDVI GeoTIFF</span> from the
                 sidebar to visualize an existing NDVI product.
+                <span className="block mt-0.5">AOI analysis becomes available after an NDVI raster is loaded.</span>
               </div>
             </div>
           </div>

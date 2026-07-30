@@ -20,6 +20,8 @@ import { useGeoTIFFStore } from "@/stores/geotiff-store";
 import { toast } from "sonner";
 import {
   calculateAOIStatisticsAsync,
+  calculatePolygonAreaM2,
+  calculatePolygonPerimeterMeters,
   type AOIStatsResult,
 } from "@/lib/geotiff/calculate-aoi-statistics";
 import DirectoryBrowserModal from "@/components/modals/DirectoryBrowserModal";
@@ -119,6 +121,14 @@ function Dashboard() {
       setClicked(null);
       setAoiStatsResult(null);
       setSwipeMode(false);
+      // No raster → disable AOI tool and cancel any running analysis
+      setAoiMode(false);
+      if (aoiAbortRef.current) {
+        aoiAbortRef.current.abort();
+        aoiAbortRef.current = null;
+      }
+      setIsAOIAnalyzing(false);
+      setAoiProgress(0);
     }
   }, [raster]);
 
@@ -370,7 +380,7 @@ function Dashboard() {
 
     try {
       pushLog("INFO", `Submitting pipeline job (Input: /${inputRelPath || "root"}, Output: /${outputRelPath || "root"})...`);
-      const res = await api.submitJob(inputRelPath, outputRelPath, true);
+      const res = await api.submitJob(inputRelPath, outputRelPath, false);
       lastSeqRef.current = 0;
       setActiveJobId(res.job_id);
       setActiveJobStatus(res.status);
@@ -452,8 +462,8 @@ function Dashboard() {
         pushLog(level, msg);
       });
 
-      // Commit parsed raster to existing GeoTIFF store
-      setRaster(candidateRaster);
+      // Commit parsed raster to existing GeoTIFF store with active result_id
+      setRaster(candidateRaster, result.result_id);
       useGeoTIFFStore.getState().triggerZoomToRaster();
 
       // Automatically open Metadata panel after overlaying completes
@@ -587,27 +597,90 @@ function Dashboard() {
     setIsAOIAnalyzing(true);
     setAoiProgress(0);
 
-    try {
-      const stats = await calculateAOIStatisticsAsync(
-        raster,
-        points,
-        (progressPercent) => setAoiProgress(progressPercent),
-        abortController.signal,
-      );
+    const activeResultId = useGeoTIFFStore.getState().activeResultId;
 
-      if (stats.errorTitle) {
-        toast.error(stats.errorTitle, {
-          description: stats.errorMessage,
-        });
-        pushLog("WARN", `AOI Analysis: ${stats.errorTitle} - ${stats.errorMessage}`);
+    try {
+      if (activeResultId && backendConnected) {
+        // Backend-generated raster workflow: exact server-side spatial windowing & clipping
+        const geojsonPolygon = {
+          type: "Polygon",
+          coordinates: [
+            [
+              ...points.map(([lat, lng]) => [lng, lat]),
+              [points[0][1], points[0][0]], // Close ring
+            ],
+          ],
+        };
+
+        const res = await api.getAOIAnalytics([activeResultId], geojsonPolygon);
+        const item = res.series && res.series[0];
+
+        if (!item || item.status === "no_overlap" || item.status === "no_valid_pixels") {
+          const msg = item?.message || "The selected AOI polygon does not contain valid NDVI pixels.";
+          toast.warning("AOI Analysis Warning", { description: msg });
+          pushLog("WARN", `AOI Analysis: ${msg}`);
+        } else {
+          const areaM2 = calculatePolygonAreaM2(points);
+          const areaHectares = Number((areaM2 / 10000).toFixed(2));
+          const areaAcres = Number((areaHectares * 2.47105).toFixed(2));
+          const perimeterMeters = Number(calculatePolygonPerimeterMeters(points).toFixed(1));
+
+          const vCount = item.valid_count ?? item.valid_pixel_count ?? 0;
+          const ndCount = item.nodata_count ?? item.nodata_pixel_count ?? 0;
+          const minNdvi = item.min_ndvi ?? item.minimum ?? 0;
+          const maxNdvi = item.max_ndvi ?? item.maximum ?? 0;
+          const meanNdvi = item.mean_ndvi ?? item.mean ?? 0;
+          const medianNdvi = item.median_ndvi ?? item.median ?? 0;
+          const stdDev = item.std_dev ?? item.standard_deviation ?? 0;
+          const vegPct = vCount > 0 ? Number((((meanNdvi + 1) / 2) * 100).toFixed(1)) : 0;
+
+          setAoiStatsResult({
+            polygonPoints: points,
+            areaHectares,
+            areaAcres,
+            perimeterMeters,
+            pixelCount: vCount,
+            noDataPixelCount: ndCount,
+            minimum: minNdvi,
+            maximum: maxNdvi,
+            mean: meanNdvi,
+            median: medianNdvi,
+            stdDev: stdDev,
+            vegetationPercentage: vegPct,
+            isExact: true,
+            stride: 1,
+            windowPixelCount: vCount + ndCount,
+            inspectedPixelCount: vCount + ndCount,
+          });
+          setAoiModalOpen(true);
+          pushLog(
+            "SUCCESS",
+            `AOI Field Polygon clipped (Backend exact spatial analysis): ${areaHectares} ha (${areaAcres} acres) · Mean NDVI=${meanNdvi}, Median=${medianNdvi}, StdDev=${stdDev}`,
+          );
+        }
       } else {
-        setAoiStatsResult(stats);
-        setAoiModalOpen(true);
-        const modeLabel = stats.isExact ? "Exact analysis" : "Estimated from sampled pixels";
-        pushLog(
-          "SUCCESS",
-          `AOI Field Polygon clipped (${modeLabel}): ${stats.areaHectares} ha (${stats.areaAcres} acres) · Mean NDVI=${stats.mean}, Veg Coverage=${stats.vegetationPercentage}%`,
+        // Manually loaded local raster workflow: exact client-side spatial windowing
+        const stats = await calculateAOIStatisticsAsync(
+          raster,
+          points,
+          (progressPercent) => setAoiProgress(progressPercent),
+          abortController.signal,
         );
+
+        if (stats.errorTitle) {
+          toast.error(stats.errorTitle, {
+            description: stats.errorMessage,
+          });
+          pushLog("WARN", `AOI Analysis: ${stats.errorTitle} - ${stats.errorMessage}`);
+        } else {
+          setAoiStatsResult(stats);
+          setAoiModalOpen(true);
+          const modeLabel = stats.isExact ? "Exact analysis" : "Estimated from sampled pixels";
+          pushLog(
+            "SUCCESS",
+            `AOI Field Polygon clipped (${modeLabel}): ${stats.areaHectares} ha (${stats.areaAcres} acres) · Mean NDVI=${stats.mean}, Veg Coverage=${stats.vegetationPercentage}%`,
+          );
+        }
       }
     } catch (err: unknown) {
       if ((err as Error)?.message === "AOI_ANALYSIS_CANCELLED") {
@@ -658,6 +731,7 @@ function Dashboard() {
             swipeActive={swipeMode}
             swipeDisabled={!raster}
             aoiActive={aoiMode}
+            aoiDisabled={!raster}
             onToggleMeasure={handleToggleMeasure}
             onToggleSwipe={handleToggleSwipe}
             onToggleAOI={handleToggleAOI}
@@ -707,6 +781,7 @@ function Dashboard() {
                     swipeActive={swipeMode}
                     onToggleSwipe={handleToggleSwipe}
                     aoiActive={aoiMode}
+                    aoiDisabled={!raster}
                     onToggleAOI={handleToggleAOI}
                     onAOIFinished={handleAOIFinished}
                     isAOIAnalyzing={isAOIAnalyzing}

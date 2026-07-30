@@ -63,11 +63,12 @@ def submit_job(req: CreateJobRequest):
             detail=f"An active pipeline job ({active_dup}) is already running for the selected input/output locations."
         )
 
+    create_mosaic_flag = req.create_mosaic if req.create_mosaic is not None else req.create_periodic_mosaic
     try:
         job_id = manager.create_job(
             input_rel=req.input_relative_path,
             output_rel=req.output_relative_path,
-            create_periodic_mosaic=req.create_periodic_mosaic
+            create_periodic_mosaic=create_mosaic_flag
         )
     except ValueError as val_err:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(val_err))
