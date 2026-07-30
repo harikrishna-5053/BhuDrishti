@@ -22,6 +22,9 @@ import {
   calculateAOIStatisticsAsync,
   type AOIStatsResult,
 } from "@/lib/geotiff/calculate-aoi-statistics";
+import DirectoryBrowserModal from "@/components/modals/DirectoryBrowserModal";
+import { api, type ResultItem } from "@/lib/api/client";
+import { MAX_VIEWER_FILE_MB } from "@/lib/api/config";
 import { useTheme } from "@/hooks/use-theme";
 
 const GISMap = lazy(() => import("@/components/gis/GISMap"));
@@ -143,16 +146,202 @@ function Dashboard() {
     },
   ]);
 
+  // Phase 2 Integration State (Page-Level Owner)
+  const [backendConnected, setBackendConnected] = useState(false);
+  const [inputRelPath, setInputRelPath] = useState<string>(
+    () => localStorage.getItem("bhudrishti_selected_input") || ""
+  );
+  const [outputRelPath, setOutputRelPath] = useState<string>(
+    () => localStorage.getItem("bhudrishti_selected_output") || ""
+  );
+  const [activeJobId, setActiveJobId] = useState<string | null>(
+    () => localStorage.getItem("bhudrishti_active_job_id") || null
+  );
+  const [activeJobStatus, setActiveJobStatus] = useState<string | null>(null);
+  const [jobSummary, setJobSummary] = useState<any | null>(null);
+  const [jobResults, setJobResults] = useState<ResultItem[]>([]);
+
+  // Directory Browser Modal
+  const [browserModalOpen, setBrowserModalOpen] = useState(false);
+  const [browserScope, setBrowserScope] = useState<"input" | "output">("input");
+
+  const lastSeqRef = useRef<number>(0);
+  const pollTimerRef = useRef<any>(null);
+
+  // Persist path selections
+  useEffect(() => {
+    if (inputRelPath) localStorage.setItem("bhudrishti_selected_input", inputRelPath);
+    else localStorage.removeItem("bhudrishti_selected_input");
+  }, [inputRelPath]);
+
+  useEffect(() => {
+    if (outputRelPath) localStorage.setItem("bhudrishti_selected_output", outputRelPath);
+    else localStorage.removeItem("bhudrishti_selected_output");
+  }, [outputRelPath]);
+
+  // Page Refresh Recovery & Active Job Polling
+  useEffect(() => {
+    if (!activeJobId) {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      return;
+    }
+
+    const pollJob = async () => {
+      try {
+        const summary = await api.getJobStatus(activeJobId);
+        setJobSummary(summary);
+        setActiveJobStatus(summary.status);
+
+        // Fetch events incrementally
+        const evData = await api.getJobEvents(activeJobId, lastSeqRef.current);
+        if (evData.events && evData.events.length > 0) {
+          lastSeqRef.current = evData.latest_sequence;
+          setLogs((prev) => [
+            ...prev,
+            ...evData.events.map((ev, idx) => ({
+              id: prev.length + idx + 1,
+              time: new Date(ev.timestamp).toLocaleTimeString("en-US", { hour12: false }),
+              level: (ev.type === "system" ? (ev.stage === "failed" ? "ERROR" : "INFO") : "INFO") as LogLevel,
+              msg: ev.message,
+            })),
+          ]);
+        }
+
+        // Terminal State Handling
+        if (["SUCCEEDED", "FAILED", "CANCELLED"].includes(summary.status)) {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          localStorage.removeItem("bhudrishti_active_job_id");
+
+          if (summary.status === "SUCCEEDED") {
+            toast.success("Pipeline Succeeded", {
+              description: `Generated ${summary.result?.ndvi_outputs_created || 0} NDVI GeoTIFF(s).`,
+            });
+            pushLog("SUCCESS", `Pipeline completed successfully! Created ${summary.result?.ndvi_outputs_created || 0} NDVI GeoTIFF(s).`);
+            // Fetch job results
+            try {
+              const resList = await api.getJobResults(activeJobId);
+              setJobResults(resList.results);
+              setBottomPaneExpanded(true);
+              setBottomTab("results");
+            } catch (rErr) {
+              console.error("Failed to fetch job results:", rErr);
+            }
+          } else if (summary.status === "FAILED") {
+            toast.error("Pipeline Failed", { description: summary.error || summary.message });
+            pushLog("ERROR", `Pipeline failed: ${summary.error || summary.message}`);
+          } else if (summary.status === "CANCELLED") {
+            toast.info("Pipeline Cancelled", { description: "Job execution was cancelled." });
+            pushLog("WARN", "Pipeline execution cancelled.");
+          }
+        }
+      } catch (err: any) {
+        console.error("Job polling error:", err);
+      }
+    };
+
+    pollJob();
+    pollTimerRef.current = setInterval(pollJob, 1000);
+
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJobId]);
+
   const pushLog = (level: LogLevel, msg: string) => {
     setLogs((prev) => [
       ...prev,
       {
         id: prev.length + 1,
-        time: new Date().toLocaleTimeString("en-GB"),
+        time: new Date().toLocaleTimeString("en-US", { hour12: false }),
         level,
         msg,
       },
     ]);
+  };
+
+  const handleOpenBrowser = (scope: "input" | "output") => {
+    setBrowserScope(scope);
+    setBrowserModalOpen(true);
+  };
+
+  const handleGenerateNDVI = async () => {
+    if (!backendConnected) {
+      toast.info("NDVI generation backend is not connected yet. You can currently load and analyse local GeoTIFF files.");
+      pushLog("INFO", "NDVI generation backend is not connected yet. You can currently load and analyse local GeoTIFF files.");
+      return;
+    }
+
+    if (!inputRelPath && inputRelPath !== "") {
+      handleOpenBrowser("input");
+      return;
+    }
+
+    try {
+      pushLog("INFO", `Submitting pipeline job (Input: /${inputRelPath || "root"}, Output: /${outputRelPath || "root"})...`);
+      const res = await api.submitJob(inputRelPath, outputRelPath, true);
+      lastSeqRef.current = 0;
+      setActiveJobId(res.job_id);
+      setActiveJobStatus(res.status);
+      localStorage.setItem("bhudrishti_active_job_id", res.job_id);
+      toast.success("Job Submitted", { description: `Job ${res.job_id.slice(0, 8)} queued in single-worker queue.` });
+    } catch (err: any) {
+      toast.error("Job Submission Failed", { description: err.message });
+      pushLog("ERROR", `Failed to submit job: ${err.message}`);
+    }
+  };
+
+  const handleCancelJob = async () => {
+    if (!activeJobId) return;
+    try {
+      setActiveJobStatus("CANCELLING");
+      pushLog("WARN", `Requesting cancellation for job ${activeJobId.slice(0, 8)}...`);
+      await api.cancelJob(activeJobId);
+    } catch (err: any) {
+      toast.error("Cancel Request Failed", { description: err.message });
+    }
+  };
+
+  // Open generated output in viewer (Directive 9, 20)
+  const handleOpenResultInViewer = async (result: ResultItem) => {
+    const sizeMB = result.size_bytes / (1024 * 1024);
+    if (sizeMB > MAX_VIEWER_FILE_MB) {
+      toast.warning("File Size Exceeds Limit", {
+        description: `GeoTIFF size (${sizeMB.toFixed(1)} MB) exceeds browser viewer limit (${MAX_VIEWER_FILE_MB} MB). Use Download instead.`,
+      });
+      pushLog("WARN", `Skipped browser auto-load: ${result.filename} (${sizeMB.toFixed(1)} MB) exceeds ${MAX_VIEWER_FILE_MB} MB limit.`);
+      return;
+    }
+
+    toast.info("Fetching GeoTIFF Result...", { description: `Downloading ${result.filename} from backend server.` });
+    pushLog("INFO", `Fetching server-generated result "${result.filename}" for browser viewer...`);
+
+    try {
+      const downloadUrl = api.getDownloadUrl(result.job_id, result.result_id);
+      const res = await fetch(downloadUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const blob = await res.blob();
+      const file = new File([blob], result.filename, { type: "image/tiff" });
+
+      // Open in existing GeoTIFF Modal flow
+      setGeoTIFFModalOpen(true);
+      pushLog("SUCCESS", `Loaded server result "${result.filename}" into GeoTIFF parser.`);
+    } catch (err: any) {
+      toast.error("Failed to load result file", { description: err.message });
+      pushLog("ERROR", `Could not fetch result file: ${err.message}`);
+    }
+  };
+
+  // Direct browser download without loading into JS memory (Directive 21)
+  const handleDownloadResult = (result: ResultItem) => {
+    const downloadUrl = api.getDownloadUrl(result.job_id, result.result_id);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = result.filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    pushLog("INFO", `Direct browser download initiated for "${result.filename}"`);
   };
 
   const handleClick = (lat: number, lng: number) => {
@@ -319,6 +508,7 @@ function Dashboard() {
             onToggleAOI={handleToggleAOI}
             onOpenCartographicExport={() => setCartographicModalOpen(true)}
             onOpenSettings={() => setSettingsModalOpen(true)}
+            onBackendStatusChange={(connected) => setBackendConnected(connected)}
           />
         }
         sidebar={
@@ -331,6 +521,15 @@ function Dashboard() {
             onOpenUpload={() => setUploadModalOpen(true)}
             onOpenGeoTIFFUpload={() => setGeoTIFFModalOpen(true)}
             onRemoveGeoTIFF={() => setClicked(null)}
+            inputRelPath={inputRelPath}
+            outputRelPath={outputRelPath}
+            backendConnected={backendConnected}
+            activeJobId={activeJobId}
+            activeJobStatus={activeJobStatus}
+            jobSummary={jobSummary}
+            onOpenBrowser={handleOpenBrowser}
+            onGenerateNDVI={handleGenerateNDVI}
+            onCancelJob={handleCancelJob}
           />
         }
       >
@@ -394,6 +593,9 @@ function Dashboard() {
           onOpenResult={handleOpenResult}
           onExportGeoTIFF={handleExportGeoTIFF}
           onViewResultGauge={handleInspectHealth}
+          jobResults={jobResults}
+          onOpenResultInViewer={handleOpenResultInViewer}
+          onDownloadResult={handleDownloadResult}
         />
       </MainLayout>
 
@@ -438,6 +640,17 @@ function Dashboard() {
         open={cartographicModalOpen}
         onClose={() => setCartographicModalOpen(false)}
         onPushLog={pushLog}
+      />
+      <DirectoryBrowserModal
+        open={browserModalOpen}
+        scope={browserScope}
+        initialRelativePath={browserScope === "input" ? inputRelPath : outputRelPath}
+        onClose={() => setBrowserModalOpen(false)}
+        onSelect={(relPath) => {
+          if (browserScope === "input") setInputRelPath(relPath);
+          else setOutputRelPath(relPath);
+          pushLog("INFO", `Selected backend ${browserScope} folder: /${relPath || "(root)"}`);
+        }}
       />
     </>
   );

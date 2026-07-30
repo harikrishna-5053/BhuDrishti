@@ -168,6 +168,9 @@ export default function BottomPane({
               onOpenResult={onOpenResult}
               onExportGeoTIFF={onExportGeoTIFF}
               onViewResultGauge={onViewResultGauge}
+              jobResults={jobResults}
+              onOpenResultInViewer={onOpenResultInViewer}
+              onDownloadResult={onDownloadResult}
             />
           )}
           {tab === "metadata" && <MetadataPanel />}
@@ -264,17 +267,24 @@ function ChangePanel() {
     </div>
   );
 }
-
 function ResultsPanel({
+  jobResults = [],
+  onOpenResultInViewer,
+  onDownloadResult,
+  onOpenResult,
   onExportGeoTIFF,
+  onViewResultGauge,
 }: {
+  jobResults?: any[];
+  onOpenResultInViewer?: (res: any) => void;
+  onDownloadResult?: (res: any) => void;
   onOpenResult?: (name: string, year: number) => void;
   onExportGeoTIFF?: (name: string) => void;
   onViewResultGauge?: (name: string) => void;
 }) {
   const { raster, zoomTrigger } = useGeoTIFFStore();
 
-  if (!raster) {
+  if (!raster && jobResults.length === 0) {
     return (
       <div className="glass-panel h-full rounded-xl p-6 bg-[var(--surface-0)] border border-border flex flex-col items-center justify-center text-center gap-2 font-mono text-xs">
         <Sparkles className="h-8 w-8 text-muted-foreground/60" />
@@ -288,51 +298,93 @@ function ResultsPanel({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-      <div className="glass-panel overflow-hidden rounded-xl bg-[var(--surface-0)] border border-emerald-500/40 shadow-lg font-mono">
-        <div className="relative h-14 w-full bg-[var(--surface-1)] border-b border-border flex items-center justify-between px-3">
-          <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/40">
-            Active Local GeoTIFF
-          </span>
-          <span className="text-[10px] text-muted-foreground font-bold">{raster.crs}</span>
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 font-mono text-xs">
+      {/* Backend Job Results */}
+      {jobResults.map((res) => {
+        const sizeMB = (res.size_bytes / (1024 * 1024)).toFixed(2);
+        return (
+          <div
+            key={res.result_id}
+            className="glass-panel overflow-hidden rounded-xl bg-[var(--surface-0)] border border-primary/40 shadow-md font-mono"
+          >
+            <div className="relative h-12 w-full bg-[var(--surface-1)] border-b border-border flex items-center justify-between px-3">
+              <span className="rounded bg-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary border border-primary/40">
+                {res.category}
+              </span>
+              <span className="text-[10px] text-muted-foreground font-bold">{sizeMB} MB</span>
+            </div>
+            <div className="p-3 space-y-2">
+              <div className="text-xs font-bold text-foreground truncate" title={res.filename}>
+                {res.filename}
+              </div>
+              <div className="text-[10px] text-muted-foreground truncate font-mono">
+                /{res.relative_path}
+              </div>
+
+              <div className="pt-2 flex items-center gap-1.5">
+                <button
+                  onClick={() => onOpenResultInViewer?.(res)}
+                  className="flex-1 rounded-md bg-primary text-primary-foreground px-2.5 py-1.5 text-xs font-bold hover:bg-primary/90 transition flex items-center justify-center gap-1 cursor-pointer shadow-sm"
+                >
+                  <MapIcon className="h-3.5 w-3.5" />
+                  Open in Viewer
+                </button>
+                <button
+                  onClick={() => onDownloadResult?.(res)}
+                  className="rounded-md border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs font-bold text-foreground hover:bg-[var(--surface-2)] transition flex items-center justify-center gap-1 cursor-pointer"
+                  title="Direct browser download"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Active Local GeoTIFF Card */}
+      {raster && (
+        <div className="glass-panel overflow-hidden rounded-xl bg-[var(--surface-0)] border border-emerald-500/40 shadow-lg font-mono">
+          <div className="relative h-12 w-full bg-[var(--surface-1)] border-b border-border flex items-center justify-between px-3">
+            <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/40">
+              Active Map Raster
+            </span>
+            <span className="text-[10px] text-muted-foreground font-bold">{raster.crs}</span>
+          </div>
+          <div className="p-3">
+            <div className="text-xs font-bold text-foreground truncate" title={raster.fileName}>
+              {raster.fileName}
+            </div>
+            <div className="text-[10px] text-muted-foreground font-medium mt-0.5">
+              {(raster.fileSize / (1024 * 1024)).toFixed(2)} MB · {raster.width} × {raster.height} px
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-1 text-[10px]">
+              <MiniField label="Mean NDVI" value={raster.statistics.mean.toFixed(3)} />
+              <MiniField
+                label="Veg Coverage"
+                value={`${raster.statistics.vegetationPercentage.toFixed(1)}%`}
+              />
+            </div>
+            <div className="mt-3 flex items-center gap-1.5">
+              <button
+                onClick={() => useGeoTIFFStore.setState({ zoomTrigger: zoomTrigger + 1 })}
+                className="flex-1 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 px-2 py-1.5 text-xs font-bold hover:bg-emerald-500/30 transition flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <MapIcon className="h-3.5 w-3.5" />
+                Zoom to Bounds
+              </button>
+              <button
+                onClick={() => onExportGeoTIFF && onExportGeoTIFF(raster.fileName)}
+                className="rounded-md bg-[var(--surface-1)] border border-border px-2.5 py-1.5 text-xs font-bold text-foreground hover:bg-[var(--surface-2)] transition flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="p-3">
-          <div className="text-sm font-bold text-foreground truncate" title={raster.fileName}>
-            {raster.fileName}
-          </div>
-          <div className="text-[10px] text-muted-foreground font-medium mt-0.5">
-            {(raster.fileSize / (1024 * 1024)).toFixed(2)} MB · {raster.width} × {raster.height} px
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
-            <MiniField label="Mean NDVI" value={raster.statistics.mean.toFixed(3)} />
-            <MiniField
-              label="Veg Coverage"
-              value={`${raster.statistics.vegetationPercentage.toFixed(1)}%`}
-            />
-            <MiniField
-              label="Min / Max"
-              value={`${raster.statistics.minimum.toFixed(2)} / ${raster.statistics.maximum.toFixed(2)}`}
-            />
-            <MiniField label="Projection" value={raster.crs} />
-          </div>
-          <div className="mt-3 flex items-center gap-1.5">
-            <button
-              onClick={() => useGeoTIFFStore.setState({ zoomTrigger: zoomTrigger + 1 })}
-              className="flex-1 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 px-2 py-1.5 text-xs font-bold hover:bg-emerald-500/30 transition flex items-center justify-center gap-1 cursor-pointer"
-            >
-              <MapIcon className="h-3 w-3" />
-              Zoom to Bounds
-            </button>
-            <button
-              onClick={() => onExportGeoTIFF && onExportGeoTIFF(raster.fileName)}
-              className="flex-1 rounded-md bg-[var(--surface-1)] border border-border px-2 py-1.5 text-xs font-bold text-foreground hover:bg-[var(--surface-2)] transition flex items-center justify-center gap-1 cursor-pointer"
-            >
-              <Download className="h-3 w-3" />
-              Export
-            </button>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

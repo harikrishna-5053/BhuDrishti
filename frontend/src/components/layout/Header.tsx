@@ -1,6 +1,8 @@
+import { useState, useEffect } from "react";
 import { Globe2, Ruler, GitCompareArrows, Settings2, Crop, Printer, Sun, Moon } from "lucide-react";
 import { formatCoord } from "@/lib/geo-format";
 import type { Theme } from "@/hooks/use-theme";
+import { api } from "@/lib/api/client";
 
 function IconBtn({
   icon: Icon,
@@ -47,6 +49,7 @@ export default function Header({
   onToggleAOI,
   onOpenCartographicExport,
   onOpenSettings,
+  onBackendStatusChange,
 }: {
   cursor: {
     lat: number;
@@ -64,64 +67,81 @@ export default function Header({
   onToggleAOI?: () => void;
   onOpenCartographicExport?: () => void;
   onOpenSettings?: () => void;
+  onBackendStatusChange?: (connected: boolean) => void;
 }) {
+  const [backendStatus, setBackendStatus] = useState<"checking" | "connected" | "disconnected">("checking");
+
+  const checkHealth = async () => {
+    try {
+      await api.getHealth();
+      setBackendStatus("connected");
+      onBackendStatusChange?.(true);
+    } catch {
+      setBackendStatus("disconnected");
+      onBackendStatusChange?.(false);
+    }
+  };
+
+  useEffect(() => {
+    checkHealth();
+    const interval = setInterval(checkHealth, 20000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-[var(--surface-0)] px-4 shadow-[0_1px_6px_rgba(0,0,0,0.06)] relative z-20">
       {/* Left Logo Section */}
       <div className="flex items-center gap-3">
-        <img
-          src="/favicon.svg"
-          alt="BhuDrishti Logo"
-          className="h-9 w-9 shrink-0 object-contain filter drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]"
-        />
-        <div className="leading-tight">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-semibold tracking-tight text-foreground">
-              BhuDrishti
-            </span>
+        <div className="flex items-center gap-2">
+          <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground font-extrabold text-sm shadow-[var(--shadow-glow)] font-mono">
+            BD
           </div>
-          <span className="text-[11px] text-muted-foreground font-medium">
-            Sentinel-2 NDVI Analytics
-          </span>
+          <div>
+            <h1 className="text-sm font-bold text-foreground tracking-tight font-mono">BhuDrishti</h1>
+            <p className="text-[10px] text-muted-foreground font-mono">NDVI Analytics Console</p>
+          </div>
         </div>
       </div>
 
-      {/* Middle Controls */}
-      <div className="hidden items-center gap-2.5 md:flex">
+      {/* Center Tools Section */}
+      <div className="flex items-center gap-2">
         <IconBtn
           icon={Ruler}
-          label="Measure Distance & Area"
+          label="Measure Distance"
           active={measureActive}
           onClick={onToggleMeasure}
         />
         <IconBtn
           icon={GitCompareArrows}
-          label={
-            swipeDisabled
-              ? "Load an NDVI GeoTIFF before using Swipe Comparison."
-              : "Swipe compare mode"
-          }
+          label="Swipe Compare"
           active={swipeActive}
           disabled={swipeDisabled}
           onClick={onToggleSwipe}
         />
         <IconBtn
           icon={Crop}
-          label="Draw AOI Field Polygon & Clip Stats"
+          label="AOI Analysis"
           active={aoiActive}
           onClick={onToggleAOI}
         />
+        <div className="mx-1 h-5 w-px bg-border" />
         <IconBtn
           icon={Printer}
-          label="Export Cartographic Map Layout"
+          label="Export Map Layout"
           onClick={onOpenCartographicExport}
         />
         <IconBtn
+          icon={Settings2}
+          label="Settings"
+          onClick={onOpenSettings}
+        />
+        <div className="mx-1 h-5 w-px bg-border" />
+        <IconBtn
           icon={theme === "dark" ? Sun : Moon}
-          label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
           onClick={onToggleTheme}
         />
-        <IconBtn icon={Settings2} label="Console Settings" onClick={onOpenSettings} />
       </div>
 
       {/* Right Status Section */}
@@ -139,10 +159,30 @@ export default function Header({
         <span className="rounded bg-[var(--surface-2)] px-2 py-0.5 font-semibold text-foreground border border-border">
           z {cursor.zoom.toFixed(0)}
         </span>
-        <span className="hidden items-center gap-1.5 rounded-full border border-border bg-[var(--surface-1)] px-2 py-1 md:flex font-medium text-amber-500/90 dark:text-amber-400">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />
-          Processing backend not connected
-        </span>
+
+        {/* Dynamic Backend Status Indicator */}
+        <button
+          onClick={checkHealth}
+          title="Click to recheck backend connection"
+          className="hidden items-center gap-1.5 rounded-full border border-border bg-[var(--surface-1)] px-2.5 py-1 md:flex font-medium transition cursor-pointer hover:bg-[var(--surface-2)]"
+        >
+          {backendStatus === "checking" ? (
+            <>
+              <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-ping" />
+              <span className="text-muted-foreground">Checking backend...</span>
+            </>
+          ) : backendStatus === "connected" ? (
+            <>
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.7)]" />
+              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Backend connected</span>
+            </>
+          ) : (
+            <>
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />
+              <span className="text-amber-600 dark:text-amber-400">Processing backend not connected</span>
+            </>
+          )}
+        </button>
       </div>
     </header>
   );
