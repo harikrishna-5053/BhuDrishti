@@ -24,10 +24,14 @@ def discover_tiles_structured(safe_path: str, logger=None) -> Dict[str, TileBand
 
     for root, _, files in os.walk(safe_path):
         for file in sorted(files):
-            if not file.lower().endswith(".jp2"):
+            ext = file.lower().split(".")[-1]
+            if ext not in ("jp2", "tif", "tiff"):
                 continue
 
             filename_upper = file.upper()
+            if "PREW" in filename_upper or "PVI" in filename_upper or "_TCI_" in filename_upper:
+                continue
+
             full_path = os.path.join(root, file)
             tile_id = get_tile_id(filename_upper)
             if tile_id == "UNKNOWN":
@@ -35,13 +39,16 @@ def discover_tiles_structured(safe_path: str, logger=None) -> Dict[str, TileBand
 
             candidates.setdefault(tile_id, {"b04": [], "b08": [], "scl": []})
 
-            # Check band types and resolution indicators
-            if "_B04" in filename_upper and "10M" in filename_upper:
-                candidates[tile_id]["b04"].append(full_path)
-            elif "_B08" in filename_upper and "_B8A" not in filename_upper and "10M" in filename_upper:
-                candidates[tile_id]["b08"].append(full_path)
-            elif "_SCL" in filename_upper and "20M" in filename_upper:
-                candidates[tile_id]["scl"].append(full_path)
+            # Check band types and resolution indicators (B04 10m, B08 10m, SCL 20m)
+            if "_B04" in filename_upper and ("10M" in filename_upper or "R10M" in root.upper() or "R10M" in filename_upper or not ("20M" in filename_upper or "60M" in filename_upper)):
+                if not ("20M" in filename_upper or "60M" in filename_upper or "R20M" in root.upper() or "R60M" in root.upper()):
+                    candidates[tile_id]["b04"].append(full_path)
+            elif "_B08" in filename_upper and "_B8A" not in filename_upper and ("10M" in filename_upper or "R10M" in root.upper() or "R10M" in filename_upper or not ("20M" in filename_upper or "60M" in filename_upper)):
+                if not ("20M" in filename_upper or "60M" in filename_upper or "R20M" in root.upper() or "R60M" in root.upper()):
+                    candidates[tile_id]["b08"].append(full_path)
+            elif "_SCL" in filename_upper and ("20M" in filename_upper or "R20M" in root.upper() or "R20M" in filename_upper or not ("60M" in filename_upper)):
+                if not ("60M" in filename_upper or "R60M" in root.upper()):
+                    candidates[tile_id]["scl"].append(full_path)
 
     structured_tiles: Dict[str, TileBandSet] = {}
 

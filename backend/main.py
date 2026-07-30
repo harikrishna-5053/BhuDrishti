@@ -283,6 +283,12 @@ def run_pipeline(
                         resampleAlg="near"
                     )
 
+                    if scl_resampled is None or scl_resampled.RasterXSize != red_ds.RasterXSize or scl_resampled.RasterYSize != red_ds.RasterYSize:
+                        print(f"SKIPPED TILE (SCL ALIGNMENT FAILED): {tile_id}")
+                        tiles_failed_count += 1
+                        zip_success = False
+                        continue
+
                     try:
                         ndvi, ref_ds = generate_ndvi(red, nir, scl_resampled, logger)
                         tif_path, _ = get_tile_output_paths(safe_output_dir, acquisition_id, tile_id)

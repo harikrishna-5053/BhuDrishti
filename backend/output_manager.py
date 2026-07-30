@@ -62,7 +62,7 @@ def get_tile_output_paths(safe_output_dir, acquisition_id, tile_id):
 
     tif_path = os.path.join(
         safe_output_dir,
-        f"{acquisition_id}_NDVI.tif"
+        f"{tile_id}_{acquisition_id}_NDVI.tif"
     )
 
     png_path = os.path.join(
