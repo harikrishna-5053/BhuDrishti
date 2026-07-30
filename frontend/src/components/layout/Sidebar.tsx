@@ -65,6 +65,8 @@ export default function Sidebar({
   onPushLog,
   onOpenGeoTIFFUpload,
   onRemoveGeoTIFF,
+  onChangeInputPath,
+  onChangeOutputPath,
   inputRelPath = "",
   outputRelPath = "",
   backendConnected = false,
@@ -83,6 +85,8 @@ export default function Sidebar({
   onOpenUpload?: () => void;
   onOpenGeoTIFFUpload?: () => void;
   onRemoveGeoTIFF?: () => void;
+  onChangeInputPath?: (path: string) => void;
+  onChangeOutputPath?: (path: string) => void;
   inputRelPath?: string;
   outputRelPath?: string;
   backendConnected?: boolean;
@@ -117,6 +121,8 @@ export default function Sidebar({
           <NDVIGenerationSection
             inputRelPath={inputRelPath}
             outputRelPath={outputRelPath}
+            onChangeInputPath={onChangeInputPath || (() => {})}
+            onChangeOutputPath={onChangeOutputPath || (() => {})}
             backendConnected={backendConnected}
             activeJobId={activeJobId}
             activeJobStatus={activeJobStatus}
@@ -206,6 +212,8 @@ function SectionHeader({
 function NDVIGenerationSection({
   inputRelPath,
   outputRelPath,
+  onChangeInputPath,
+  onChangeOutputPath,
   backendConnected,
   activeJobId,
   activeJobStatus,
@@ -216,6 +224,8 @@ function NDVIGenerationSection({
 }: {
   inputRelPath: string;
   outputRelPath: string;
+  onChangeInputPath: (path: string) => void;
+  onChangeOutputPath: (path: string) => void;
   backendConnected: boolean;
   activeJobId: string | null;
   activeJobStatus: string | null;
@@ -231,44 +241,56 @@ function NDVIGenerationSection({
     <section className="glass-panel rounded-xl p-3 bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-2.5">
       <SectionHeader icon={FolderKanban} title="NDVI Pipeline Paths" />
 
-      {/* Input Path Selection Button */}
+      {/* Input Path Input Field + Folder Symbol Button */}
       <div className="space-y-1">
         <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
           Input Folder (Sentinel-2 ZIPs)
         </label>
-        <button
-          onClick={() => onOpenBrowser("input")}
-          disabled={!backendConnected || !!isJobActive}
-          className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground transition hover:border-primary/60 hover:bg-[var(--surface-2)] disabled:opacity-50 cursor-pointer font-mono"
-        >
-          <div className="flex items-center gap-1.5 min-w-0 truncate">
-            <FolderOpen className="h-3.5 w-3.5 text-primary shrink-0" />
-            <span className="truncate text-[11px] font-medium">
-              /{inputRelPath || "(root input_zips)"}
-            </span>
-          </div>
-          <span className="text-[10px] font-semibold text-primary shrink-0">Browse</span>
-        </button>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="text"
+            value={inputRelPath}
+            onChange={(e) => onChangeInputPath(e.target.value)}
+            placeholder="e.g. data/input_zips or relative path"
+            disabled={!backendConnected || !!isJobActive}
+            className="flex-1 min-w-0 rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 transition focus:border-primary focus:outline-none disabled:opacity-50 font-mono"
+          />
+          <button
+            type="button"
+            onClick={() => onOpenBrowser("input")}
+            disabled={!backendConnected || !!isJobActive}
+            title="Browse File Explorer"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-[var(--surface-1)] text-primary hover:border-primary/60 hover:bg-[var(--surface-2)] disabled:opacity-50 transition cursor-pointer"
+          >
+            <FolderOpen className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
-      {/* Output Path Selection Button */}
+      {/* Output Path Input Field + Folder Symbol Button */}
       <div className="space-y-1">
         <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
           Output Folder (Generated Rasters)
         </label>
-        <button
-          onClick={() => onOpenBrowser("output")}
-          disabled={!backendConnected || !!isJobActive}
-          className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground transition hover:border-primary/60 hover:bg-[var(--surface-2)] disabled:opacity-50 cursor-pointer font-mono"
-        >
-          <div className="flex items-center gap-1.5 min-w-0 truncate">
-            <FolderOpen className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-            <span className="truncate text-[11px] font-medium">
-              /{outputRelPath || "(root output)"}
-            </span>
-          </div>
-          <span className="text-[10px] font-semibold text-emerald-500 shrink-0">Browse</span>
-        </button>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="text"
+            value={outputRelPath}
+            onChange={(e) => onChangeOutputPath(e.target.value)}
+            placeholder="e.g. data/output or relative path"
+            disabled={!backendConnected || !!isJobActive}
+            className="flex-1 min-w-0 rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 transition focus:border-emerald-500 focus:outline-none disabled:opacity-50 font-mono"
+          />
+          <button
+            type="button"
+            onClick={() => onOpenBrowser("output")}
+            disabled={!backendConnected || !!isJobActive}
+            title="Browse File Explorer"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-[var(--surface-1)] text-emerald-500 hover:border-emerald-500/60 hover:bg-[var(--surface-2)] disabled:opacity-50 transition cursor-pointer"
+          >
+            <FolderOpen className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Active Job Real Progress Panel */}

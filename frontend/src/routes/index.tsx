@@ -626,6 +626,8 @@ function Dashboard() {
             onRemoveGeoTIFF={() => setClicked(null)}
             inputRelPath={inputRelPath}
             outputRelPath={outputRelPath}
+            onChangeInputPath={(val) => setInputRelPath(val)}
+            onChangeOutputPath={(val) => setOutputRelPath(val)}
             backendConnected={backendConnected}
             activeJobId={activeJobId}
             activeJobStatus={activeJobStatus}

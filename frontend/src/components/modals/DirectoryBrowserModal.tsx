@@ -110,9 +110,17 @@ export default function DirectoryBrowserModal({
                 <ArrowLeft className="h-3.5 w-3.5" />
               </button>
             )}
-            <span className="truncate text-[11px] font-semibold text-foreground">
-              / {currentRel || "(root)"}
-            </span>
+            <div className="flex flex-1 items-center gap-1 min-w-0">
+              <span className="text-[11px] font-bold text-muted-foreground">/</span>
+              <input
+                type="text"
+                value={currentRel}
+                onChange={(e) => setCurrentRel(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && loadDirectories(currentRel)}
+                placeholder="Type or edit relative path..."
+                className="w-full rounded border border-border bg-[var(--surface-0)] px-2 py-1 text-[11px] font-mono text-foreground focus:border-primary focus:outline-none"
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
