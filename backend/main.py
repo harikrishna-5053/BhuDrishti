@@ -11,7 +11,7 @@ from config import PipelineConfig, ConfigurationError
 from precheck_intersection import check_zip_intersection
 from zip_manager import extract_zip_safely
 from tile_band_discovery import discover_tiles_structured
-from ndvi_processing import generate_ndvi
+from ndvi_processing import generate_ndvi, generate_ndvi_file
 from mosaic_cpu.cpu_periodic_mosaic import create_cpu_periodic_mosaics
 from output_manager import get_safe_output_root, get_tile_output_paths
 from logger import setup_logger
@@ -25,7 +25,8 @@ except ImportError:
     try:
         import gdal
     except ImportError:
-        gdal = None
+        from gdal_compat import gdal
+
 
 if gdal and hasattr(gdal, "SetCacheMax"):
     gdal.SetCacheMax(512 * 1024 * 1024)
@@ -266,42 +267,65 @@ def run_pipeline(
                     nir = band_set.b08_path
                     scl = band_set.scl_path
 
-                    red_ds = gdal.Open(red)
-                    scl_ds = gdal.Open(scl)
+                    red_ds = gdal.Open(red, gdal.GA_ReadOnly)
+                    scl_ds = gdal.Open(scl, gdal.GA_ReadOnly)
                     if not red_ds or not scl_ds:
                         print(f"SKIPPED TILE (GDAL OPEN FAILED): {tile_id}")
                         tiles_failed_count += 1
                         zip_success = False
                         continue
 
+                    # SCL Alignment preserving CRS, Geotransform, Origin, Pixel alignment & Extent
+                    red_gt = red_ds.GetGeoTransform()
+                    red_w = red_ds.RasterXSize
+                    red_h = red_ds.RasterYSize
+                    minx = red_gt[0]
+                    maxy = red_gt[3]
+                    maxx = minx + red_gt[1] * red_w
+                    miny = maxy + red_gt[5] * red_h  # red_gt[5] is negative resolution step
+
                     scl_resampled = gdal.Warp(
                         "",
                         scl_ds,
                         format="MEM",
-                        width=red_ds.RasterXSize,
-                        height=red_ds.RasterYSize,
+                        dstSRS=red_ds.GetProjection(),
+                        outputBounds=[minx, miny, maxx, maxy],
+                        width=red_w,
+                        height=red_h,
                         resampleAlg="near"
                     )
 
-                    if scl_resampled is None or scl_resampled.RasterXSize != red_ds.RasterXSize or scl_resampled.RasterYSize != red_ds.RasterYSize:
-                        print(f"SKIPPED TILE (SCL ALIGNMENT FAILED): {tile_id}")
+                    if scl_resampled is None:
+                        print(f"SKIPPED TILE (SCL ALIGNMENT WARP FAILED): {tile_id}")
+                        tiles_failed_count += 1
+                        zip_success = False
+                        continue
+
+                    # Explicit SCL Alignment Verification
+                    scl_gt = scl_resampled.GetGeoTransform()
+                    dim_match = (scl_resampled.RasterXSize == red_w and scl_resampled.RasterYSize == red_h)
+                    gt_match = (scl_gt and all(abs(scl_gt[i] - red_gt[i]) < 1e-5 for i in range(6)))
+
+                    if not (dim_match and gt_match):
+                        print(f"SKIPPED TILE (SCL ALIGNMENT VERIFICATION FAILED): {tile_id}")
                         tiles_failed_count += 1
                         zip_success = False
                         continue
 
                     try:
-                        ndvi, ref_ds = generate_ndvi(red, nir, scl_resampled, logger)
                         tif_path, _ = get_tile_output_paths(safe_output_dir, acquisition_id, tile_id)
 
-                        valid_ndvi = ndvi[ndvi != config.nodata_value]
-                        if valid_ndvi.size == 0:
-                            print(f"No valid NDVI pixels for tile {tile_id}")
-                            tiles_failed_count += 1
-                            zip_success = False
-                            continue
-
-                        # Save output GeoTIFF
-                        save_ndvi_tiff(ndvi, ref_ds, tif_path, logger)
+                        # Generate NDVI directly using window-based block processing
+                        generate_ndvi_file(
+                            red_path=red,
+                            nir_path=nir,
+                            scl_resampled=scl_resampled,
+                            output_tif=tif_path,
+                            block_size=config.block_size,
+                            nodata_value=config.nodata_value,
+                            logger=logger,
+                            progress_callback=progress_callback
+                        )
 
                         # Validate output GeoTIFF before declaring success
                         val_ok, val_err = validate_output_tiff(tif_path, expected_nodata=config.nodata_value)
@@ -324,6 +348,7 @@ def run_pipeline(
                         print(f"TILE FAILED : {tile_id}\n{e}")
                         emit_log("ERROR", msg)
                         result.errors.append(msg)
+
 
             # Record final ZIP processing status
             if zip_success and outputs_created_for_zip:

@@ -1,22 +1,33 @@
 import os
 import json
 import threading
+import numpy as np
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
+
 try:
     from osgeo import gdal
 except ImportError:
     try:
         import gdal
     except ImportError:
-        gdal = None
+        from gdal_compat import gdal
+
 
 def validate_output_tiff(filepath: str, expected_nodata: Optional[float] = -9999.0) -> Tuple[bool, Optional[str]]:
     """
-    Validates GeoTIFF output files before declaring successful processing.
-    Ensures GDAL dataset is closed in EVERY code path.
-    Distinguishes missing nodata from a nodata value of zero.
+    Validates GeoTIFF output files against all 11 scientific & structural criteria:
+    - File exists
+    - File size > 0
+    - GDAL opens successfully
+    - One raster band
+    - Float32 datatype
+    - Width > 0, Height > 0
+    - Projection exists
+    - Geotransform exists
+    - nodata = -9999
+    - Contains at least one valid (non-nodata) pixel
     """
     if not os.path.exists(filepath):
         return False, f"Output TIFF file does not exist: {filepath}"
@@ -29,6 +40,9 @@ def validate_output_tiff(filepath: str, expected_nodata: Optional[float] = -9999
         ds = gdal.Open(filepath, gdal.GA_ReadOnly)
         if ds is None:
             return False, f"GDAL failed to open GeoTIFF: {filepath}"
+
+        if ds.RasterCount != 1:
+            return False, f"Output GeoTIFF must have exactly 1 band, found {ds.RasterCount} in {filepath}"
 
         width = ds.RasterXSize
         height = ds.RasterYSize
@@ -47,16 +61,35 @@ def validate_output_tiff(filepath: str, expected_nodata: Optional[float] = -9999
         if band is None:
             return False, f"GeoTIFF has no raster band 1: {filepath}"
 
+        if band.DataType != gdal.GDT_Float32:
+            return False, f"GeoTIFF data type must be Float32 (GDT_Float32), found type {band.DataType} in {filepath}"
+
         actual_nodata = band.GetNoDataValue()
         if actual_nodata is None:
             return False, f"Output raster does not define a nodata value in {filepath}"
-        
-        # Explicit check: distinguish missing nodata from zero or expected nodata
+
         if expected_nodata is not None and abs(actual_nodata - expected_nodata) > 1e-4:
             return False, (
                 f"Unexpected nodata value in {filepath}: expected {expected_nodata}, "
                 f"found {actual_nodata}"
             )
+
+        # Verify at least one valid (non-nodata) pixel exists in the raster
+        has_valid_pixel = False
+        block_step = 2048
+        for yoff in range(0, height, block_step):
+            ysize = min(block_step, height - yoff)
+            for xoff in range(0, width, block_step):
+                xsize = min(block_step, width - xoff)
+                arr = band.ReadAsArray(xoff, yoff, xsize, ysize)
+                if arr is not None and np.any(arr != actual_nodata):
+                    has_valid_pixel = True
+                    break
+            if has_valid_pixel:
+                break
+
+        if not has_valid_pixel:
+            return False, f"Output GeoTIFF contains zero valid (non-nodata) pixels in {filepath}"
 
     except Exception as e:
         return False, f"Exception validating GeoTIFF {filepath}: {e}"
@@ -65,6 +98,7 @@ def validate_output_tiff(filepath: str, expected_nodata: Optional[float] = -9999
             ds = None  # Force close GDAL dataset handle in ALL code paths
 
     return True, None
+
 
 class ProcessingTracker:
     """

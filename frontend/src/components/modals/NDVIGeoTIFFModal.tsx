@@ -392,33 +392,30 @@ export default function NDVIGeoTIFFModal({
                     </div>
                   )}
 
-                  {/* Supported CRS list for Unsupported CRS errors */}
+                  {/* Supported CRS info & Detected CRS failure details */}
                   {validationError.code === "UNSUPPORTED_CRS" && (
                     <div className="rounded-md bg-[var(--surface-1)] border border-border p-3 text-[11px] space-y-1.5 font-mono">
                       <div className="font-bold text-foreground">
-                        BhuDrishti currently supports:
+                        Supported Coordinate Reference Systems:
                       </div>
-                      <ul className="list-disc list-inside text-muted-foreground space-y-0.5 text-[10px]">
-                        <li>
-                          <strong className="text-foreground">EPSG:4326</strong> — WGS84
-                          Latitude/Longitude
-                        </li>
-                        <li>
-                          <strong className="text-foreground">EPSG:32643</strong> — WGS84 / UTM Zone
-                          43N
-                        </li>
-                        <li>
-                          <strong className="text-foreground">EPSG:32644</strong> — WGS84 / UTM Zone
-                          44N
-                        </li>
-                        <li>
-                          <strong className="text-foreground">EPSG:32645</strong> — WGS84 / UTM Zone
-                          45N
-                        </li>
-                      </ul>
-                      <div className="text-[10px] text-muted-foreground pt-1 border-t border-border/50">
-                        Please upload a properly georeferenced GeoTIFF in one of these coordinate
-                        systems.
+                      <div className="text-[10px] text-muted-foreground leading-relaxed">
+                        BhuDrishti supports WGS84 geographic coordinates, all WGS84 UTM zones, and other projected GeoTIFFs when a valid browser-compatible CRS definition is available.
+                      </div>
+                      <div className="text-[10px] text-muted-foreground pt-1 border-t border-border/50 space-y-0.5">
+                        {validationError.detectedCrs && (
+                          <div>
+                            <strong className="text-foreground">Detected CRS:</strong>{" "}
+                            <span className="text-destructive font-bold">
+                              {validationError.detectedCrs}
+                            </span>
+                          </div>
+                        )}
+                        {validationError.technicalDetails && (
+                          <div>
+                            <strong className="text-foreground">Reason:</strong>{" "}
+                            <span>{validationError.technicalDetails}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}

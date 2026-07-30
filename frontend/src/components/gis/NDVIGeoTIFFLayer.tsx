@@ -16,6 +16,7 @@ export default function NDVIGeoTIFFLayer({ raster, opacity, visible }: NDVIGeoTI
   const map = useMap();
   const layerRef = useRef<L.Layer | null>(null);
   const { zoomTrigger, colorRamp } = useGeoTIFFStore();
+  const lastFileNameRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined" || !raster || !raster.georasterObj) {
@@ -64,6 +65,9 @@ export default function NDVIGeoTIFFLayer({ raster, opacity, visible }: NDVIGeoTI
 
       geoLayer.addTo(map);
       layerRef.current = geoLayer as unknown as L.Layer;
+
+      // Invalidate map size to ensure canvas is properly sized
+      map.invalidateSize();
     } catch (err) {
       console.error("Failed to render GeoRasterLayer on Leaflet map:", err);
     }
@@ -80,14 +84,31 @@ export default function NDVIGeoTIFFLayer({ raster, opacity, visible }: NDVIGeoTI
     };
   }, [map, raster, opacity, visible, colorRamp]);
 
-  // Handle explicit Zoom-to-Raster triggers
+  // Handle explicit Zoom-to-Raster triggers and new raster auto-fitting
   useEffect(() => {
-    if (zoomTrigger > 0 && raster && visible) {
+    if (!raster || !visible) return;
+
+    const isNewRaster = lastFileNameRef.current !== raster.fileName;
+    if (zoomTrigger > 0 || isNewRaster) {
+      lastFileNameRef.current = raster.fileName;
       const bounds: L.LatLngBoundsExpression = [
         [raster.geoBounds.south, raster.geoBounds.west],
         [raster.geoBounds.north, raster.geoBounds.east],
       ];
+
+      // Immediate fit
+      map.invalidateSize();
       map.fitBounds(bounds, { padding: [30, 30], maxZoom: 13, animate: true });
+
+      // Delayed fit to account for bottom pane CSS animation / resize transition
+      const timerId = setTimeout(() => {
+        if (map) {
+          map.invalidateSize();
+          map.fitBounds(bounds, { padding: [30, 30], maxZoom: 13, animate: false });
+        }
+      }, 350);
+
+      return () => clearTimeout(timerId);
     }
   }, [zoomTrigger, raster, visible, map]);
 

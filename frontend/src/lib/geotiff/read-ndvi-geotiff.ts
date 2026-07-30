@@ -183,16 +183,45 @@ export async function readNDVIGeoTIFF(
   } else {
     logCallback?.("INFO", `Transforming bounds from ${validatedCrs} to EPSG:4326...`);
     try {
-      const sw = proj4(validatedCrs, "EPSG:4326", [nativeBounds.west, nativeBounds.south]);
-      const ne = proj4(validatedCrs, "EPSG:4326", [nativeBounds.east, nativeBounds.north]);
-      const nw = proj4(validatedCrs, "EPSG:4326", [nativeBounds.west, nativeBounds.north]);
-      const se = proj4(validatedCrs, "EPSG:4326", [nativeBounds.east, nativeBounds.south]);
+      const samplePoints: [number, number][] = [
+        [nativeBounds.west, nativeBounds.south],
+        [nativeBounds.east, nativeBounds.north],
+        [nativeBounds.west, nativeBounds.north],
+        [nativeBounds.east, nativeBounds.south],
+        [(nativeBounds.west + nativeBounds.east) / 2, (nativeBounds.south + nativeBounds.north) / 2],
+        [(nativeBounds.west + nativeBounds.east) / 2, nativeBounds.south],
+        [(nativeBounds.west + nativeBounds.east) / 2, nativeBounds.north],
+        [nativeBounds.west, (nativeBounds.south + nativeBounds.north) / 2],
+        [nativeBounds.east, (nativeBounds.south + nativeBounds.north) / 2],
+      ];
+
+      const transformed: [number, number][] = [];
+      for (const [x, y] of samplePoints) {
+        const res = proj4(validatedCrs, "EPSG:4326", [x, y]);
+        const lon = res[0];
+        const lat = res[1];
+
+        if (
+          typeof lon !== "number" ||
+          typeof lat !== "number" ||
+          !Number.isFinite(lon) ||
+          !Number.isFinite(lat) ||
+          Number.isNaN(lon) ||
+          Number.isNaN(lat)
+        ) {
+          throw new Error(`Transformation returned non-finite coordinate [${lon}, ${lat}]`);
+        }
+        transformed.push([lon, lat]);
+      }
+
+      const lons = transformed.map((p) => p[0]);
+      const lats = transformed.map((p) => p[1]);
 
       geoBounds = {
-        west: Math.min(sw[0], nw[0]),
-        south: Math.min(sw[1], se[1]),
-        east: Math.max(ne[0], se[0]),
-        north: Math.max(ne[1], nw[1]),
+        west: Math.min(...lons),
+        south: Math.min(...lats),
+        east: Math.max(...lons),
+        north: Math.max(...lats),
       };
     } catch (err) {
       logCallback?.(
@@ -202,14 +231,16 @@ export async function readNDVIGeoTIFF(
       throw new GeoTIFFValidationError({
         code: "TRANSFORMATION_FAILED",
         title: "Coordinate Transformation Failed",
-        userMessage:
-          "BhuDrishti could not transform the raster coordinates safely.\n\nPlease verify that the GeoTIFF contains a valid and supported projection.",
+        userMessage: `BhuDrishti could not transform coordinates from ${validatedCrs} to EPSG:4326 safely.`,
+        detectedCrs: validatedCrs,
+        technicalDetails: `Detected CRS: ${validatedCrs} | Reason: ${err instanceof Error ? err.message : String(err)}`,
         originalError: err,
       });
     }
   }
 
-  validateTransformedBounds(geoBounds);
+  validateTransformedBounds(geoBounds, validatedCrs);
+
 
   // 11. Extract & Normalize Band Pixel Values to [-1.0, +1.0]
   const numberOfRasters = georasterObj.numberOfRasters || 1;

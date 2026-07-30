@@ -15,6 +15,8 @@ import {
   Maximize2,
   X,
   Loader2,
+  PanelLeftOpen,
+  PanelLeftClose,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRef, type Dispatch, type SetStateAction } from "react";
@@ -30,7 +32,6 @@ const LAYER_META: {
   hint: string;
   swatch: string;
 }[] = [
-  { key: "ndvi", label: "NDVI Raster", hint: "S2 L2A · 10 m", swatch: "var(--gradient-ndvi)" },
   {
     key: "rgb",
     label: "RGB Satellite Imagery",
@@ -55,6 +56,7 @@ const PIPELINE = [
   { id: "ndvi", label: "NDVI Generation", icon: Leaf, hint: "(NIR − Red) / (NIR + Red)" },
   { id: "mosaic", label: "Periodic Mosaic", icon: Layers, hint: "Median composite" },
   { id: "export", label: "Export GeoTIFF", icon: Download, hint: "COG · EPSG:4326" },
+  { id: "overlay", label: "Map Layer Overlay", icon: Eye, hint: "Rendering GeoTIFF on map workspace" },
 ];
 
 export default function Sidebar({
@@ -103,20 +105,25 @@ export default function Sidebar({
         open ? "w-[340px]" : "w-14"
       }`}
     >
-      <button
-        onClick={onToggle}
-        className="absolute -right-3 top-6 z-10 grid h-6 w-6 place-items-center rounded-full border border-border bg-[var(--surface-0)] text-muted-foreground shadow-md hover:text-primary transition cursor-pointer"
-        title={open ? "Collapse sidebar" : "Expand sidebar"}
-      >
-        {open ? (
-          <ChevronLeft className="h-3.5 w-3.5" />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5" />
-        )}
-      </button>
-
       {open ? (
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+          {/* ChatGPT/Gemini Style Expanded Header */}
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <div className="flex items-center gap-2 font-mono">
+              <span className="text-xs font-bold uppercase tracking-wider text-foreground">Control Panel</span>
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary border border-primary/20">
+                Sentinel-2
+              </span>
+            </div>
+            <button
+              onClick={onToggle}
+              title="Close Control Panel"
+              aria-label="Close Control Panel"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-[var(--surface-1)] text-muted-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition cursor-pointer"
+            >
+              <PanelLeftClose className="h-4.5 w-4.5" />
+            </button>
+          </div>
           {/* 1. NDVI GENERATION & BACKEND PATHS SECTION */}
           <NDVIGenerationSection
             inputRelPath={inputRelPath}
@@ -146,18 +153,42 @@ export default function Sidebar({
           />
         </div>
       ) : (
-        <div className="flex flex-1 flex-col items-center gap-4 pt-6">
+        <div className="flex flex-1 flex-col items-center gap-3 pt-3">
+          {/* ChatGPT / Gemini style Panel Toggle Symbol (Top of collapsed sidebar) */}
+          <button
+            onClick={onToggle}
+            title="Open Control Panel (Expand Sidebar)"
+            aria-label="Open Control Panel"
+            className="grid h-9 w-9 place-items-center rounded-lg border border-border bg-[var(--surface-1)] text-primary hover:bg-primary/20 hover:border-primary/50 shadow-sm transition cursor-pointer"
+          >
+            <PanelLeftOpen className="h-5 w-5" />
+          </button>
+
+          {/* Divider line below toggle button */}
+          <div className="h-px w-8 bg-border my-0.5" />
+
+          {/* Control Panel Shortcut Icons */}
           {[
             {
               icon: FolderKanban,
               label: "NDVI Generation",
-              onClick: () => onOpenBrowser("input"),
+              onClick: () => {
+                onToggle();
+                onOpenBrowser("input");
+              },
             },
-            { icon: Play, label: "Process Status", onClick: onToggle },
+            {
+              icon: Play,
+              label: "Process Status",
+              onClick: onToggle,
+            },
             {
               icon: FileImage,
               label: "Local NDVI GeoTIFF",
-              onClick: onOpenGeoTIFFUpload || onToggle,
+              onClick: () => {
+                onToggle();
+                if (onOpenGeoTIFFUpload) onOpenGeoTIFFUpload();
+              },
             },
             { icon: Layers, label: "Layer Manager", onClick: onToggle },
           ].map((item, i) => {
@@ -166,7 +197,7 @@ export default function Sidebar({
               <button
                 key={i}
                 onClick={item.onClick}
-                title={`View ${item.label}`}
+                title={`Open Control Panel — ${item.label}`}
                 className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground hover:bg-[var(--surface-2)] hover:text-primary transition cursor-pointer"
               >
                 <Icon className="h-4 w-4" />
@@ -231,28 +262,17 @@ function NDVIGenerationSection({
   onGenerateNDVI: () => void;
   onCancelJob: () => void;
 }) {
-  const isJobActive = activeJobId && ["QUEUED", "RUNNING", "CANCELLING"].includes(activeJobStatus || "");
+  const isJobActive = activeJobId && ["QUEUED", "RUNNING", "CANCELLING", "OVERLAYING"].includes(activeJobStatus || "");
   const isCancelling = activeJobStatus === "CANCELLING";
 
   const inputFolderRef = useRef<HTMLInputElement>(null);
   const outputFolderRef = useRef<HTMLInputElement>(null);
 
-  const handlePickNativeFolder = async (
-    targetRef: React.RefObject<HTMLInputElement | null>,
-    onSelect: (path: string) => void
-  ) => {
-    if ("showDirectoryPicker" in window) {
-      try {
-        const handle = await (window as any).showDirectoryPicker();
-        if (handle && handle.name) {
-          onSelect(handle.name);
-          return;
-        }
-      } catch (err: any) {
-        if (err.name === "AbortError") return;
-      }
+  const handlePickNativeFolder = (targetRef: React.RefObject<HTMLInputElement | null>) => {
+    if (targetRef.current) {
+      targetRef.current.value = "";
+      targetRef.current.click();
     }
-    targetRef.current?.click();
   };
 
   return (
@@ -271,13 +291,26 @@ function NDVIGenerationSection({
           const files = e.target.files;
           if (files && files.length > 0) {
             const first = files[0];
-            const folderName = first.webkitRelativePath
-              ? first.webkitRelativePath.split("/")[0]
-              : first.name;
-            const fullPath = (first as any).path
-              ? (first as any).path.replace(/[\\/][^\\/]+$/, "")
-              : folderName;
-            onChangeInputPath(fullPath || folderName);
+            let selectedPath = "";
+            if ("path" in first && typeof (first as any).path === "string" && (first as any).path) {
+              const fullFilePath = (first as any).path;
+              const lastSlash = Math.max(fullFilePath.lastIndexOf("/"), fullFilePath.lastIndexOf("\\"));
+              if (lastSlash > 0) {
+                selectedPath = fullFilePath.substring(0, lastSlash);
+              }
+            }
+            if (!selectedPath && first.webkitRelativePath) {
+              const parts = first.webkitRelativePath.split("/");
+              if (parts.length > 1) {
+                selectedPath = parts.slice(0, parts.length - 1).join("/");
+              } else {
+                selectedPath = parts[0];
+              }
+            }
+            if (!selectedPath) {
+              selectedPath = first.name;
+            }
+            onChangeInputPath(selectedPath);
           }
         }}
       />
@@ -292,13 +325,26 @@ function NDVIGenerationSection({
           const files = e.target.files;
           if (files && files.length > 0) {
             const first = files[0];
-            const folderName = first.webkitRelativePath
-              ? first.webkitRelativePath.split("/")[0]
-              : first.name;
-            const fullPath = (first as any).path
-              ? (first as any).path.replace(/[\\/][^\\/]+$/, "")
-              : folderName;
-            onChangeOutputPath(fullPath || folderName);
+            let selectedPath = "";
+            if ("path" in first && typeof (first as any).path === "string" && (first as any).path) {
+              const fullFilePath = (first as any).path;
+              const lastSlash = Math.max(fullFilePath.lastIndexOf("/"), fullFilePath.lastIndexOf("\\"));
+              if (lastSlash > 0) {
+                selectedPath = fullFilePath.substring(0, lastSlash);
+              }
+            }
+            if (!selectedPath && first.webkitRelativePath) {
+              const parts = first.webkitRelativePath.split("/");
+              if (parts.length > 1) {
+                selectedPath = parts.slice(0, parts.length - 1).join("/");
+              } else {
+                selectedPath = parts[0];
+              }
+            }
+            if (!selectedPath) {
+              selectedPath = first.name;
+            }
+            onChangeOutputPath(selectedPath);
           }
         }}
       />
@@ -319,9 +365,9 @@ function NDVIGenerationSection({
           />
           <button
             type="button"
-            onClick={() => handlePickNativeFolder(inputFolderRef, onChangeInputPath)}
+            onClick={() => handlePickNativeFolder(inputFolderRef)}
             disabled={!backendConnected || !!isJobActive}
-            title="Open File Explorer"
+            title="Open OS File Explorer"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-[var(--surface-1)] text-primary hover:border-primary/60 hover:bg-[var(--surface-2)] disabled:opacity-50 transition cursor-pointer"
           >
             <FolderOpen className="h-4 w-4" />
@@ -345,9 +391,9 @@ function NDVIGenerationSection({
           />
           <button
             type="button"
-            onClick={() => handlePickNativeFolder(outputFolderRef, onChangeOutputPath)}
+            onClick={() => handlePickNativeFolder(outputFolderRef)}
             disabled={!backendConnected || !!isJobActive}
-            title="Open File Explorer"
+            title="Open OS File Explorer"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-[var(--surface-1)] text-emerald-500 hover:border-emerald-500/60 hover:bg-[var(--surface-2)] disabled:opacity-50 transition cursor-pointer"
           >
             <FolderOpen className="h-4 w-4" />
@@ -441,7 +487,11 @@ function ProcessingSection({
       <div className="space-y-1.5">
         {PIPELINE.map((step, i) => {
           const Icon = step.icon;
-          const isActiveStage = activeJobSummary?.current_stage?.toLowerCase().includes(step.id);
+          const isActiveStage =
+            (activeJobSummary?.current_stage &&
+              activeJobSummary.current_stage.toLowerCase().includes(step.id)) ||
+            (step.id === "overlay" &&
+              (activeJobSummary?.current_stage === "map_overlay" || activeJobSummary?.current_stage === "overlay"));
           return (
             <div
               key={step.id}

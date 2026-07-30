@@ -121,7 +121,7 @@ export function validateSourceBounds(bounds: RasterBounds): void {
 /**
  * Validates transformed WGS84 EPSG:4326 bounds.
  */
-export function validateTransformedBounds(bounds: RasterBounds): void {
+export function validateTransformedBounds(bounds: RasterBounds, crs?: string): void {
   const isValidNumber = (v: number) =>
     typeof v === "number" && Number.isFinite(v) && !Number.isNaN(v);
 
@@ -137,11 +137,15 @@ export function validateTransformedBounds(bounds: RasterBounds): void {
     bounds.west >= bounds.east ||
     bounds.south >= bounds.north
   ) {
+    const crsDetail = crs ? `Detected CRS: ${crs} | ` : "";
     throw new GeoTIFFValidationError({
       code: "TRANSFORMATION_FAILED",
       title: "Coordinate Transformation Failed",
       userMessage:
         "BhuDrishti could not transform the raster coordinates safely.\n\nPlease verify that the GeoTIFF contains a valid and supported projection.",
+      detectedCrs: crs,
+      technicalDetails: `${crsDetail}Reason: Transformed geographic bounds out of valid WGS84 range (-180..180, -90..90)`,
     });
   }
 }
+

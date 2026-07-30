@@ -48,7 +48,15 @@ const DISTRICT_STYLE: L.PathOptions = { color: "#94a3b8", weight: 0.6 };
 
 function CoordDisplay({ onMove }: { onMove: (lat: number, lng: number, zoom: number) => void }) {
   useMapEvents({
-    mousemove: (e) => onMove(e.latlng.lat, e.target.getCenter().lng, e.target.getZoom()),
+    mousemove: (e) => onMove(e.latlng.lat, e.latlng.lng, e.target.getZoom()),
+    move: (e) => {
+      const c = e.target.getCenter();
+      onMove(c.lat, c.lng, e.target.getZoom());
+    },
+    drag: (e) => {
+      const c = e.target.getCenter();
+      onMove(c.lat, c.lng, e.target.getZoom());
+    },
     zoomend: (e) => {
       const c = e.target.getCenter();
       onMove(c.lat, c.lng, e.target.getZoom());
@@ -1054,14 +1062,14 @@ export default function GISMap({
 
       {/* Empty State Instruction Overlay when no raster is loaded */}
       {!raster && !measureActive && !aoiActive && !swipeActive && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[500] pointer-events-auto font-mono text-xs select-none">
-          <div className="glass-panel max-w-md rounded-xl border border-border bg-[var(--surface-0)]/95 p-3 shadow-xl backdrop-blur flex items-center gap-3">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/20 text-primary">
-              <Layers className="h-5 w-5" />
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[500] pointer-events-auto font-mono select-none">
+          <div className="glass-panel max-w-xs rounded-lg border border-border bg-[var(--surface-0)]/90 px-2.5 py-1.5 shadow-md backdrop-blur flex items-center gap-2">
+            <div className="grid h-6 w-6 shrink-0 place-items-center rounded bg-primary/20 text-primary">
+              <Layers className="h-3.5 w-3.5" />
             </div>
-            <div className="space-y-0.5">
-              <div className="font-bold text-foreground text-xs">No NDVI Raster Loaded</div>
-              <div className="text-[11px] text-muted-foreground leading-tight">
+            <div className="space-y-0">
+              <div className="font-bold text-foreground text-[11px]">No NDVI Raster Loaded</div>
+              <div className="text-[10px] text-muted-foreground leading-tight">
                 Open <span className="font-semibold text-primary">Load NDVI GeoTIFF</span> from the
                 sidebar to visualize an existing NDVI product.
               </div>

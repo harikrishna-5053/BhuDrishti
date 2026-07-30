@@ -2,7 +2,7 @@ import { useState } from "react";
 import { FileText, Copy, Check, HardDrive, Compass, Layers, BarChart2, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { useGeoTIFFStore } from "@/stores/geotiff-store";
-import { SUPPORTED_CRS_REGISTRY } from "@/lib/geotiff/crs-registry";
+import { getCRSDisplayName } from "@/lib/geotiff/crs-registry";
 
 export default function MetadataPanel() {
   const { raster } = useGeoTIFFStore();
@@ -20,7 +20,7 @@ export default function MetadataPanel() {
     );
   }
 
-  const crsDescription = SUPPORTED_CRS_REGISTRY[raster.crs]?.displayName ?? "Not available";
+  const crsDescription = getCRSDisplayName(raster.crs);
   const medianVal =
     raster.statistics.median !== undefined ? raster.statistics.median.toFixed(4) : "Not available";
   const stdDevVal =

@@ -85,6 +85,7 @@ export interface ResultItem {
   file_type: string;
   created_at: string;
   category: string;
+  type?: string;
 }
 
 export interface JobResultsResponse {

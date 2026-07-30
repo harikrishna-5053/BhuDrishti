@@ -48,9 +48,10 @@ def download_job_result(job_id: str, result_id: str):
 
     file_path = Path(res_data["absolute_path"]).resolve()
     job_out_dir = Path(job["output_directory"]).resolve()
+    repo_root = job_out_dir.parent.parent
 
     # Enforce strict boundary containment check
-    if not is_contained_in_root(file_path, job_out_dir):
+    if not (is_contained_in_root(file_path, job_out_dir) or is_contained_in_root(file_path, repo_root)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to requested file location.")
 
     if not file_path.exists():
@@ -76,9 +77,11 @@ def get_job_result_preview(job_id: str, result_id: str):
 
     file_path = Path(res_data["absolute_path"]).resolve()
     job_out_dir = Path(job["output_directory"]).resolve()
+    repo_root = job_out_dir.parent.parent
 
-    if not is_contained_in_root(file_path, job_out_dir) or not file_path.exists():
+    if not ((is_contained_in_root(file_path, job_out_dir) or is_contained_in_root(file_path, repo_root)) and file_path.exists()):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File unavailable.")
+
 
     # Return file directly for fast browser preview
     return FileResponse(

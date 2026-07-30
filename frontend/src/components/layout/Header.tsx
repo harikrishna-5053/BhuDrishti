@@ -3,6 +3,7 @@ import { Globe2, Ruler, GitCompareArrows, Settings2, Crop, Printer, Sun, Moon } 
 import { formatCoord } from "@/lib/geo-format";
 import type { Theme } from "@/hooks/use-theme";
 import { api } from "@/lib/api/client";
+import { useGeoTIFFStore } from "@/stores/geotiff-store";
 
 function IconBtn({
   icon: Icon,
@@ -70,6 +71,8 @@ export default function Header({
   onBackendStatusChange?: (connected: boolean) => void;
 }) {
   const [backendStatus, setBackendStatus] = useState<"checking" | "connected" | "disconnected">("checking");
+  const { raster } = useGeoTIFFStore();
+  const activeCRS = raster?.crs || "EPSG:4326";
 
   const checkHealth = async () => {
     try {
@@ -118,8 +121,8 @@ export default function Header({
       {/* Left Logo Section */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground font-extrabold text-sm shadow-[var(--shadow-glow)] font-mono">
-            BD
+          <div className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-[var(--surface-1)] shadow-sm overflow-hidden p-1">
+            <img src="/favicon.svg" alt="BhuDrishti Logo" className="h-full w-full object-contain" />
           </div>
           <div>
             <h1 className="text-sm font-bold text-foreground tracking-tight font-mono">BhuDrishti</h1>
@@ -176,8 +179,8 @@ export default function Header({
             <span className="mx-1 text-muted-foreground/70 font-normal">|</span>
             {formatCoord(cursor.lng, "lng")}
           </span>
-          <span className="text-[11px] font-semibold text-muted-foreground tracking-tight">
-            CRS: EPSG:4326
+          <span className="text-[11px] font-semibold text-primary tracking-tight">
+            CRS: {activeCRS}
           </span>
         </div>
         <span className="rounded bg-[var(--surface-2)] px-2 py-0.5 font-semibold text-foreground border border-border">

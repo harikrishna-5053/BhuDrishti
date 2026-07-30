@@ -190,6 +190,7 @@ function Dashboard() {
 
   const lastSeqRef = useRef<number>(0);
   const pollTimerRef = useRef<any>(null);
+  const autoLoadedJobIdsRef = useRef<Set<string>>(new Set());
 
   // Persist path selections
   useEffect(() => {
@@ -257,29 +258,42 @@ function Dashboard() {
             } catch {}
           }
 
-          if (summary.status === "SUCCEEDED") {
-            toast.success("Processing completed successfully.", {
-              description: `Generated ${summary.result?.ndvi_outputs_created || 0} NDVI GeoTIFF(s).`,
-            });
-            pushLog("SUCCESS", `Processing completed successfully! Created ${summary.result?.ndvi_outputs_created || 0} NDVI GeoTIFF(s).`);
-            try {
-              const resList = await api.getJobResults(activeJobId);
-              if (isSubscribed) setJobResults(resList.results);
-              setBottomPaneExpanded(true);
-              setBottomTab("results");
-            } catch (rErr) {
-              console.error("Failed to fetch job results:", rErr);
+          if (summary.status === "SUCCEEDED" || summary.status === "PARTIAL_SUCCESS") {
+            const isPartial = summary.status === "PARTIAL_SUCCESS";
+            if (isPartial) {
+              toast.warning("Processing completed with some failures.", {
+                description: summary.message,
+              });
+              pushLog("WARN", `Processing completed with some failures: ${summary.message}`);
+            } else {
+              toast.success("Processing completed successfully.", {
+                description: `Generated ${summary.result?.ndvi_outputs_created || 0} NDVI GeoTIFF(s).`,
+              });
+              pushLog(
+                "SUCCESS",
+                `Processing completed successfully! Created ${summary.result?.ndvi_outputs_created || 0} NDVI GeoTIFF(s).`
+              );
             }
-          } else if (summary.status === "PARTIAL_SUCCESS") {
-            toast.warning("Processing completed with some failures.", {
-              description: summary.message,
-            });
-            pushLog("WARN", `Processing completed with some failures: ${summary.message}`);
+
             try {
               const resList = await api.getJobResults(activeJobId);
               if (isSubscribed) setJobResults(resList.results);
-              setBottomPaneExpanded(true);
-              setBottomTab("results");
+
+              if (
+                resList.results &&
+                resList.results.length > 0 &&
+                !autoLoadedJobIdsRef.current.has(activeJobId)
+              ) {
+                autoLoadedJobIdsRef.current.add(activeJobId);
+                const selectedResult =
+                  resList.results.find(
+                    (r: ResultItem) =>
+                      r.type === "NDVI_TILE" ||
+                      r.category === "NDVI_TILE" ||
+                      r.file_type === "NDVI_TILE",
+                  ) || resList.results[0];
+                await handleOpenResultInViewer(selectedResult);
+              }
             } catch (rErr) {
               console.error("Failed to fetch job results:", rErr);
             }
@@ -383,28 +397,55 @@ function Dashboard() {
     }
   };
 
-  // Open generated output in viewer (Prompt 1)
+  // Open generated output in viewer
   const handleOpenResultInViewer = async (result: ResultItem) => {
     const sizeMB = result.size_bytes / (1024 * 1024);
     if (sizeMB > MAX_VIEWER_FILE_MB) {
-      toast.warning("File Size Exceeds Limit", {
-        description: `GeoTIFF size (${sizeMB.toFixed(1)} MB) exceeds browser viewer limit (${MAX_VIEWER_FILE_MB} MB). Use Download instead.`,
+      toast.warning("Generated NDVI is too large for automatic browser loading.", {
+        description: `NDVI generation completed, but the generated GeoTIFF (${sizeMB.toFixed(1)} MB) exceeds browser viewer limit (${MAX_VIEWER_FILE_MB} MB). It remains available in Results.`,
       });
-      pushLog("WARN", `Skipped browser auto-load: ${result.filename} (${sizeMB.toFixed(1)} MB) exceeds ${MAX_VIEWER_FILE_MB} MB limit.`);
+      pushLog(
+        "WARN",
+        `NDVI generation completed, but the generated GeoTIFF (${result.filename}, ${sizeMB.toFixed(1)} MB) exceeds browser viewer limit (${MAX_VIEWER_FILE_MB} MB). It remains available in Results.`,
+      );
       return;
     }
 
-    toast.info("Fetching GeoTIFF Result...", { description: `Downloading ${result.filename} from backend server.` });
-    pushLog("INFO", `Fetching server-generated result "${result.filename}" for browser viewer...`);
+    setActiveJobStatus("OVERLAYING");
+    setJobSummary((prev: any) => ({
+      ...(prev || {}),
+      current_stage: "map_overlay",
+      message: `Overlaying ${result.filename} on map viewer...`,
+      progress_percent: 98,
+    }));
+
+    const toastId = toast.loading("Overlaying generated GeoTIFF on map workspace...", {
+      description: `Downloading & rendering ${result.filename} for visual analysis. Please wait...`,
+    });
+
+    pushLog(
+      "INFO",
+      `[MAP OVERLAY] Fetching server-generated GeoTIFF "${result.filename}" for map workspace overlay...`,
+    );
 
     try {
       const downloadUrl = api.getDownloadUrl(result.job_id, result.result_id);
       const res = await fetch(downloadUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const blob = await res.blob();
-      const file = new File([blob], result.filename, { type: "image/tiff" });
+      if (blob.size === 0) {
+        throw new Error("Downloaded result file is empty (0 bytes).");
+      }
 
-      pushLog("INFO", `Reading candidate result file: ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB)...`);
+      const file = new File([blob], result.filename, {
+        type: blob.type || "image/tiff",
+        lastModified: Date.now(),
+      });
+
+      pushLog(
+        "INFO",
+        `Parsing GeoTIFF structure and projection: ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB)...`,
+      );
 
       // Pass File through the exact existing local GeoTIFF parsing workflow
       const candidateRaster = await readNDVIGeoTIFF(file, (level: LogLevel, msg: string) => {
@@ -413,13 +454,19 @@ function Dashboard() {
 
       // Commit parsed raster to existing GeoTIFF store
       setRaster(candidateRaster);
+      useGeoTIFFStore.getState().triggerZoomToRaster();
+
+      // Automatically open Metadata panel after overlaying completes
+      setBottomTab("metadata");
+      setBottomPaneExpanded(true);
 
       pushLog(
         "SUCCESS",
-        `GeoTIFF ${candidateRaster.fileName} loaded successfully into map viewer (${candidateRaster.width}x${candidateRaster.height}, ${candidateRaster.crs}). Min=${candidateRaster.statistics.minimum}, Max=${candidateRaster.statistics.maximum}`
+        `[MAP OVERLAY] Generated NDVI overlayed successfully: ${candidateRaster.fileName} (${candidateRaster.width}x${candidateRaster.height}, ${candidateRaster.crs}). Min=${candidateRaster.statistics.minimum}, Max=${candidateRaster.statistics.maximum}`,
       );
 
-      toast.success("Result loaded into viewer", {
+      toast.success("Generated NDVI overlayed on map viewer successfully.", {
+        id: toastId,
         description: `${candidateRaster.fileName} is now active on the map workspace.`,
       });
     } catch (err: unknown) {
@@ -430,8 +477,13 @@ function Dashboard() {
       } else if (err instanceof Error) {
         msg = err.message;
       }
-      toast.error("Failed to load result in viewer", { description: msg });
-      pushLog("ERROR", `Could not load result into viewer: ${msg}`);
+      toast.error("NDVI generated, but map overlay failed.", {
+        id: toastId,
+        description: msg,
+      });
+      pushLog("ERROR", `NDVI generated, but map overlay failed: ${msg}`);
+    } finally {
+      setActiveJobStatus((prev) => (prev === "OVERLAYING" ? "SUCCEEDED" : prev));
     }
   };
 

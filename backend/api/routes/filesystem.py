@@ -36,48 +36,70 @@ def is_contained_in_root(target_path: Path, root_path: Path) -> bool:
 
 def resolve_safe_path(root_path: Path, relative_path: str) -> Path:
     """
-    Resolves relative_path under root_path and asserts the target path
-    remains strictly within root_path.
-    Rejects path traversal, drive letters, UNC paths, and symlink escapes.
+    Resolves relative_path under root_path or repo_root safely.
+    Allows root directory itself (""), subpaths, and standard input/output folder names.
+    Rejects path traversal outside repository boundaries.
     """
     clean_rel = relative_path.replace("\\", "/").strip()
 
-    # Reject Windows drive letters (C:, D:)
-    if len(clean_rel) >= 2 and clean_rel[1] == ":":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid path: Windows drive letters are not allowed in relative paths: '{relative_path}'"
-        )
+    # Empty path or "." means the root_path itself
+    if not clean_rel or clean_rel in (".", "/", ".\\"):
+        return root_path.resolve()
 
-    # Reject UNC network paths
-    if clean_rel.startswith("//") or clean_rel.startswith("\\\\"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid path: UNC network paths are not allowed: '{relative_path}'"
-        )
+    resolved_root = root_path.resolve()
+    repo_root = resolved_root.parent.parent  # BhuDrishti repository root
 
-    # Reject leading slashes
-    if clean_rel.startswith("/"):
-        clean_rel = clean_rel.lstrip("/")
+    # If clean_rel matches root_path name or "data/<name>" or "inputs" / "outputs"
+    norm_clean = clean_rel.lower().strip("/")
+    if norm_clean in (root_path.name.lower(), f"data/{root_path.name.lower()}", "inputs", "outputs", "data/input_zips", "data/output"):
+        return resolved_root
 
+    # Handle absolute paths if provided by client inside repository
     try:
-        resolved_root = root_path.resolve()
-        target_path = (root_path / clean_rel).resolve()
+        abs_p = Path(clean_rel)
+        if abs_p.is_absolute():
+            res_abs = abs_p.resolve()
+            if res_abs.exists() and (is_contained_in_root(res_abs, resolved_root) or is_contained_in_root(res_abs, repo_root)):
+                return res_abs
+    except Exception:
+        pass
 
-        # Enforce strict boundary containment check
-        if not is_contained_in_root(target_path, resolved_root):
+    # Reject path traversal tokens leading outside repo
+    if ".." in clean_rel.split("/"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied: Path '{relative_path}' attempts traversal outside allowed root."
+        )
+
+    # Try resolving relative to root_path
+    target_path = (root_path / clean_rel).resolve()
+    if target_path.exists():
+        if not is_contained_in_root(target_path, resolved_root) and not is_contained_in_root(target_path, repo_root):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied: Path '{relative_path}' attempts traversal outside allowed root."
             )
         return target_path
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid path resolution: {e}"
-        )
+
+    # Try resolving relative to repo_root
+    try_repo_path = (repo_root / clean_rel).resolve()
+    if try_repo_path.exists():
+        if not is_contained_in_root(try_repo_path, repo_root):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied: Path '{relative_path}' attempts traversal outside allowed root."
+            )
+        return try_repo_path
+
+    # For new output directory creation under allowed roots
+    if is_contained_in_root(target_path, resolved_root) or is_contained_in_root(target_path, repo_root):
+        return target_path
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"Selected directory does not exist: '{relative_path}'"
+    )
+
 
 def validate_directory_name(name: str):
     if not name or not name.strip():

@@ -8,54 +8,6 @@ export interface CRSSpec {
   isSupported: boolean;
 }
 
-/**
- * Centralized Supported CRS Registry for BhuDrishti remote sensing console.
- * Extensible for adding future UTM zones or regional projections.
- */
-export const SUPPORTED_CRS_REGISTRY: Record<string, CRSSpec> = {
-  "EPSG:4326": {
-    epsgCode: "EPSG:4326",
-    displayName: "WGS84 Latitude/Longitude",
-    proj4Def: "+proj=longlat +datum=WGS84 +no_defs",
-    isSupported: true,
-  },
-  "EPSG:32643": {
-    epsgCode: "EPSG:32643",
-    displayName: "WGS84 / UTM Zone 43N",
-    proj4Def: "+proj=utm +zone=43 +datum=WGS84 +units=m +no_defs",
-    isSupported: true,
-  },
-  "EPSG:32644": {
-    epsgCode: "EPSG:32644",
-    displayName: "WGS84 / UTM Zone 44N",
-    proj4Def: "+proj=utm +zone=44 +datum=WGS84 +units=m +no_defs",
-    isSupported: true,
-  },
-  "EPSG:32645": {
-    epsgCode: "EPSG:32645",
-    displayName: "WGS84 / UTM Zone 45N",
-    proj4Def: "+proj=utm +zone=45 +datum=WGS84 +units=m +no_defs",
-    isSupported: true,
-  },
-};
-
-let projectionsRegistered = false;
-
-/**
- * Ensures supported proj4 definitions are registered into proj4 registry.
- */
-export function ensureProjectionsRegistered(): void {
-  if (projectionsRegistered) return;
-
-  for (const [epsg, spec] of Object.entries(SUPPORTED_CRS_REGISTRY)) {
-    if (spec.proj4Def) {
-      proj4.defs(epsg, spec.proj4Def);
-    }
-  }
-
-  projectionsRegistered = true;
-}
-
 export interface ExtractedCRSInfo {
   detectedRaw: unknown;
   normalizedCrs: string | null;
@@ -65,8 +17,40 @@ export interface ExtractedCRSInfo {
 }
 
 /**
+ * Ensures EPSG:4326 base definition is registered in proj4.
+ */
+function ensureBaseProjections(): void {
+  try {
+    if (!proj4.defs("EPSG:4326")) {
+      proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
+    }
+  } catch {
+    proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
+  }
+}
+
+/**
+ * Returns a human-readable display name for any supported CRS.
+ */
+export function getCRSDisplayName(crs: string): string {
+  if (crs === "EPSG:4326") return "WGS84 Latitude/Longitude";
+
+  const match = crs.match(/^EPSG:(\d+)$/i);
+  if (match) {
+    const code = parseInt(match[1]!, 10);
+    if (code >= 32601 && code <= 32660) {
+      return `WGS 84 / UTM Zone ${code - 32600}N`;
+    }
+    if (code >= 32701 && code <= 32760) {
+      return `WGS 84 / UTM Zone ${code - 32700}S`;
+    }
+  }
+
+  return crs;
+}
+
+/**
  * Safely extracts and normalizes CRS information from GeoTIFF metadata & GeoKeys.
- * Does NOT construct invalid EPSG strings such as EPSG:32767.
  */
 export function extractCRSInfo(
   georasterProj: unknown,
@@ -118,7 +102,7 @@ export function extractCRSInfo(
     };
   }
 
-  // Check for User-Defined Code 32767 (or string "32767" / "EPSG:32767")
+  // Check for User-Defined Code 32767
   if (rawCode === 32767 || rawCode === "32767" || rawCode === "EPSG:32767") {
     return {
       detectedRaw: rawCode,
@@ -147,17 +131,20 @@ export function extractCRSInfo(
 }
 
 /**
- * Validates extracted CRS info against supported CRS registry.
- * Throws structured GeoTIFFValidationError if invalid or unsupported.
+ * Dynamically resolves or constructs a proj4 definition for a detected CRS
+ * and registers it into proj4 if not already present.
  */
-export function validateGeoTIFFCRS(crsInfo: ExtractedCRSInfo): string {
+export function resolveAndRegisterCRS(crsInfo: ExtractedCRSInfo): string {
+  ensureBaseProjections();
+
   // Case 1: Missing CRS
   if (crsInfo.isMissing || (!crsInfo.normalizedCrs && !crsInfo.isUserDefined)) {
     throw new GeoTIFFValidationError({
       code: "MISSING_CRS",
       title: "Missing Geographic Reference",
-      userMessage:
-        "The selected TIFF does not contain a valid coordinate reference system.\n\nPlease upload a georeferenced GeoTIFF.",
+      userMessage: "The selected TIFF does not contain a valid coordinate reference system.",
+      detectedCrs: "Missing",
+      technicalDetails: "Detected CRS: Missing / Undefined",
     });
   }
 
@@ -167,29 +154,88 @@ export function validateGeoTIFFCRS(crsInfo: ExtractedCRSInfo): string {
       code: "UNSUPPORTED_CRS",
       title: "Unsupported Coordinate Reference System",
       userMessage:
-        "The uploaded GeoTIFF uses an undefined or unsupported coordinate reference system.\n\nBhuDrishti cannot safely position this raster on the map.\n\nPlease upload a properly georeferenced GeoTIFF.",
-      detectedCrs: "32767",
-      technicalDetails: "Detected CRS code: 32767",
+        "The uploaded GeoTIFF uses a user-defined or non-standard CRS code (32767) without inline projection parameters.",
+      detectedCrs: "EPSG:32767",
+      technicalDetails:
+        "Detected CRS: EPSG:32767 | Reason: User-defined projection code without embedded parameters",
     });
   }
 
   const normalized = crsInfo.normalizedCrs!;
 
-  // Case 3: CRS is not in supported registry
-  const spec = SUPPORTED_CRS_REGISTRY[normalized];
-  if (!spec || !spec.isSupported) {
-    throw new GeoTIFFValidationError({
-      code: "UNSUPPORTED_CRS",
-      title: "Unsupported Coordinate Reference System",
-      userMessage:
-        "The uploaded GeoTIFF uses an unsupported or invalid coordinate reference system.\n\nPlease upload a properly georeferenced GeoTIFF.",
-      detectedCrs: normalized,
-      technicalDetails: `Detected CRS: ${normalized}`,
-    });
+  // Case 3: WGS84 Geographic
+  if (normalized === "EPSG:4326" || normalized === "WGS84") {
+    return "EPSG:4326";
   }
 
-  // Ensure proj4 definitions are registered for the supported CRS
-  ensureProjectionsRegistered();
+  // Extract EPSG numeric code if available
+  let epsgNum: number | null = null;
+  const match = normalized.match(/^EPSG:(\d+)$/i);
+  if (match) {
+    epsgNum = parseInt(match[1]!, 10);
+  } else if (typeof crsInfo.detectedCode === "number") {
+    epsgNum = crsInfo.detectedCode;
+  }
 
-  return normalized;
+  // Dynamic UTM Zone Resolution for WGS84
+  if (epsgNum !== null) {
+    // Northern Hemisphere: EPSG:32601 to EPSG:32660
+    if (epsgNum >= 32601 && epsgNum <= 32660) {
+      const zone = epsgNum - 32600;
+      const proj4Def = `+proj=utm +zone=${zone} +datum=WGS84 +units=m +no_defs`;
+      proj4.defs(normalized, proj4Def);
+      return normalized;
+    }
+
+    // Southern Hemisphere: EPSG:32701 to EPSG:32760
+    if (epsgNum >= 32701 && epsgNum <= 32760) {
+      const zone = epsgNum - 32700;
+      const proj4Def = `+proj=utm +zone=${zone} +south +datum=WGS84 +units=m +no_defs`;
+      proj4.defs(normalized, proj4Def);
+      return normalized;
+    }
+  }
+
+  // Check if proj4 already has a definition registered for this CRS string
+  if (proj4.defs(normalized)) {
+    return normalized;
+  }
+
+  // Inspect raw projection string (e.g. embedded WKT or Proj4 string)
+  if (typeof crsInfo.detectedRaw === "string" && crsInfo.detectedRaw.trim()) {
+    const rawStr = crsInfo.detectedRaw.trim();
+    if (rawStr.startsWith("+proj") || rawStr.startsWith("PROJCS") || rawStr.startsWith("GEOGCS")) {
+      try {
+        proj4.defs(normalized, rawStr);
+        if (proj4.defs(normalized)) {
+          return normalized;
+        }
+      } catch {
+        // Fall through to unsupported error
+      }
+    }
+  }
+
+  // If definition could not be resolved or created
+  throw new GeoTIFFValidationError({
+    code: "UNSUPPORTED_CRS",
+    title: "Unsupported Coordinate Reference System",
+    userMessage: `BhuDrishti could not resolve a browser projection definition for ${normalized}.`,
+    detectedCrs: normalized,
+    technicalDetails: `Detected CRS: ${normalized} | Reason: Projection definition not found in browser registry`,
+  });
+}
+
+/**
+ * Validates extracted CRS info by resolving and registering projection.
+ */
+export function validateGeoTIFFCRS(crsInfo: ExtractedCRSInfo): string {
+  return resolveAndRegisterCRS(crsInfo);
+}
+
+/**
+ * Empty compatibility helper.
+ */
+export function ensureProjectionsRegistered(): void {
+  ensureBaseProjections();
 }
