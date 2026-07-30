@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from config import PipelineConfig
 from main import run_pipeline, PipelineResult
 from api.schemas import JobSummary, JobEvent, ResultItem
+from api.routes.filesystem import is_contained_in_root
 
 class JobManager:
     """
@@ -213,16 +214,17 @@ class JobManager:
             )
             cancel_event = job["cancel_event"]
 
-        def progress_cb(data: dict):
+        def progress_cb(info: Dict[str, Any]):
             with self._lock:
-                if job["status"] in ("SUCCEEDED", "FAILED", "CANCELLED"):
+                if job["status"] in ("SUCCEEDED", "PARTIAL_SUCCESS", "FAILED", "CANCELLED"):
                     return
-                stage = data.get("stage", "processing")
-                curr = data.get("current", 0)
-                tot = data.get("total", 0)
-                zname = data.get("zip_name", "")
-                tid = data.get("tile_id", "")
-                msg = data.get("message", "")
+
+                stage = info.get("stage", "processing")
+                curr = info.get("current", 0)
+                tot = info.get("total", 0)
+                zname = info.get("zip_name", "")
+                tid = info.get("tile_id", "")
+                msg = info.get("message", f"Processing {stage}")
 
                 job["current_stage"] = stage
                 job["current"] = curr
@@ -231,8 +233,9 @@ class JobManager:
                 job["current_tile"] = tid
                 job["message"] = msg
 
-                if stage == "zip_scan" and tot > 0:
-                    job["progress_percent"] = round((curr / tot) * 100, 1)
+                if tot > 0:
+                    pct = round((curr / tot) * 100, 1)
+                    job["progress_percent"] = min(100.0, max(0.0, pct))
                     job["indeterminate"] = False
                 else:
                     job["progress_percent"] = None
@@ -242,7 +245,7 @@ class JobManager:
 
         def log_cb(level: str, msg: str):
             with self._lock:
-                if job["status"] in ("SUCCEEDED", "FAILED", "CANCELLED"):
+                if job["status"] in ("SUCCEEDED", "PARTIAL_SUCCESS", "FAILED", "CANCELLED"):
                     return
                 self._add_event_locked(job, "log", job["current_stage"], f"[{level}] {msg}")
 
@@ -256,47 +259,67 @@ class JobManager:
             )
             with self._lock:
                 job["finished_at"] = datetime.utcnow().isoformat() + "Z"
-                if cancel_event.is_set():
+
+                # Determine terminal job status cleanly
+                if cancel_event.is_set() or pipeline_res.cancelled:
                     job["status"] = "CANCELLED"
-                    job["message"] = "Pipeline execution cancelled by user"
-                    self._add_event_locked(job, "system", "cancelled", "Pipeline execution cancelled by user")
+                    job["message"] = "Processing cancelled."
+                    self._add_event_locked(job, "system", "cancelled", "Processing cancelled.")
+                elif pipeline_res.failed_zip_files > 0 and len(pipeline_res.output_files) > 0:
+                    job["status"] = "PARTIAL_SUCCESS"
+                    job["message"] = f"Processing completed with some failures: {len(pipeline_res.output_files)} output(s) created, {pipeline_res.failed_zip_files} ZIP(s) failed."
+                    self._add_event_locked(job, "system", "completed_partial", job["message"])
+                elif pipeline_res.failed_zip_files > 0 and len(pipeline_res.output_files) == 0 and pipeline_res.total_zip_files > 0:
+                    job["status"] = "FAILED"
+                    job["message"] = f"Processing failed: all {pipeline_res.failed_zip_files} processable ZIP(s) failed."
+                    self._add_event_locked(job, "system", "failed", job["message"])
                 else:
                     job["status"] = "SUCCEEDED"
-                    job["message"] = f"Pipeline completed. Created {pipeline_res.ndvi_outputs_created} NDVI GeoTIFF(s)."
-                    job["result"] = {
-                        "total_zip_files": pipeline_res.total_zip_files,
-                        "already_processed": pipeline_res.already_processed,
-                        "processed_zip_files": pipeline_res.processed_zip_files,
-                        "skipped_outside_india": pipeline_res.skipped_outside_india,
-                        "failed_zip_files": pipeline_res.failed_zip_files,
-                        "ndvi_outputs_created": pipeline_res.ndvi_outputs_created,
-                        "mosaic_outputs_created": pipeline_res.mosaic_outputs_created,
-                        "elapsed_seconds": pipeline_res.elapsed_seconds,
+                    job["message"] = f"Processing completed successfully. Created {len(pipeline_res.output_files)} output file(s)."
+                    self._add_event_locked(job, "system", "completed", job["message"])
+
+                job["result"] = {
+                    "total_zip_files": pipeline_res.total_zip_files,
+                    "already_processed": pipeline_res.already_processed,
+                    "processed_zip_files": pipeline_res.processed_zip_files,
+                    "skipped_outside_india": pipeline_res.skipped_outside_india,
+                    "failed_zip_files": pipeline_res.failed_zip_files,
+                    "ndvi_outputs_created": pipeline_res.ndvi_outputs_created,
+                    "mosaic_outputs_created": pipeline_res.mosaic_outputs_created,
+                    "elapsed_seconds": pipeline_res.elapsed_seconds,
+                }
+
+                # Create opaque result mappings from verified pipeline output files
+                for out_file in pipeline_res.output_files:
+                    p_file = Path(out_file).resolve()
+                    if not p_file.exists() or not p_file.is_file():
+                        continue
+
+                    # Verify file remains inside job output directory
+                    if not is_contained_in_root(p_file, job_out_dir):
+                        continue
+
+                    res_id = str(uuid.uuid4())
+                    fn = p_file.name
+                    cat = "PERIODIC_MOSAIC" if "MOSAIC" in fn.upper() else "NDVI_TILE"
+                    size_b = p_file.stat().st_size
+                    try:
+                        rel_p = str(p_file.relative_to(job_out_dir)).replace("\\", "/")
+                    except ValueError:
+                        rel_p = fn
+
+                    res_item = {
+                        "result_id": res_id,
+                        "job_id": job_id,
+                        "filename": fn,
+                        "absolute_path": str(p_file),
+                        "relative_path": rel_p,
+                        "size_bytes": size_b,
+                        "file_type": "image/tiff",
+                        "created_at": datetime.utcnow().isoformat() + "Z",
+                        "category": cat
                     }
-
-                    # Create opaque result mappings
-                    for out_file in pipeline_res.output_files:
-                        res_id = str(uuid.uuid4())
-                        fn = os.path.basename(out_file)
-                        cat = "PERIODIC_MOSAIC" if "MOSAIC" in fn.upper() else "NDVI_TILE"
-                        size_b = os.path.getsize(out_file) if os.path.exists(out_file) else 0
-                        try:
-                            rel_p = str(Path(out_file).relative_to(job_out_dir))
-                        except ValueError:
-                            rel_p = fn
-
-                        res_item = {
-                            "result_id": res_id,
-                            "job_id": job_id,
-                            "filename": fn,
-                            "absolute_path": out_file,
-                            "relative_path": rel_p,
-                            "size_bytes": size_b,
-                            "file_type": "image/tiff",
-                            "created_at": datetime.utcnow().isoformat() + "Z",
-                            "category": cat
-                        }
-                        job["results_map"][res_id] = res_item
+                    job["results_map"][res_id] = res_item
 
                     self._add_event_locked(job, "system", "completed", job["message"])
 

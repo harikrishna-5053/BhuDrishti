@@ -78,6 +78,61 @@ class ResultItem(BaseModel):
     created_at: str
     category: str  # NDVI_TILE, PERIODIC_MOSAIC, OTHER
 
+class PointAnalyticsRequest(BaseModel):
+    result_ids: List[str]
+    lat: float
+    lon: float
+
+class PointValue(BaseModel):
+    result_id: str
+    filename: str
+    date: str
+    ndvi: float
+    valid: bool
+    nodata: bool
+
+class PointAnalyticsResponse(BaseModel):
+    lat: float
+    lon: float
+    series: List[PointValue]
+
+class AOIAnalyticsRequest(BaseModel):
+    result_ids: List[str]
+    geojson: Dict[str, Any]
+
+class AOIStatsValue(BaseModel):
+    result_id: str
+    filename: str
+    date: str
+    valid_count: int
+    nodata_count: int
+    min_ndvi: float
+    max_ndvi: float
+    mean_ndvi: float
+    median_ndvi: float
+    std_dev: float
+
+class AOIAnalyticsResponse(BaseModel):
+    series: List[AOIStatsValue]
+
+class ChangeDetectionRequest(BaseModel):
+    earlier_result_id: str
+    later_result_id: str
+    tolerance: float = 0.02
+
+class ChangeDetectionResponse(BaseModel):
+    earlier_filename: str
+    later_filename: str
+    min_change: float
+    max_change: float
+    mean_change: float
+    positive_count: int
+    negative_count: int
+    neutral_count: int
+    valid_count: int
+    nodata_count: int
+    change_result_id: Optional[str] = None
+
 class JobResultsResponse(BaseModel):
     job_id: str
     results: List[ResultItem]

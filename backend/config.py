@@ -29,8 +29,12 @@ class PipelineConfig:
         backend_dir = repo_root / "backend"
         data_dir = repo_root / "data"
 
-        input_dir = Path(os.environ.get("BHUDRISHTI_INPUT_DIR", data_dir / "input_zips"))
-        output_dir = Path(os.environ.get("BHUDRISHTI_OUTPUT_DIR", data_dir / "output"))
+        env_input = os.environ.get("BHUDRISHTI_INPUT_DIR") or os.environ.get("INPUT_ZIP_DIRECTORY")
+        input_dir = Path(env_input) if env_input else data_dir / "input_zips"
+
+        env_output = os.environ.get("BHUDRISHTI_OUTPUT_DIR") or os.environ.get("OUTPUT_ROOT_DIRECTORY")
+        output_dir = Path(env_output) if env_output else data_dir / "output"
+
         shapefile = Path(os.environ.get("BHUDRISHTI_INDIA_SHAPEFILE", repo_root / "India_Shape_File" / "India_fixed.shp"))
         temp_dir = Path(os.environ.get("BHUDRISHTI_TEMP_DIR", data_dir / "temp"))
         processing_mode = os.environ.get("BHUDRISHTI_PROCESSING_MODE", "cpu").lower()
@@ -51,6 +55,72 @@ class PipelineConfig:
             mosaic_method="maximum",
             block_size=2048,
             nodata_value=-9999.0,
+        )
+
+    @classmethod
+    def from_args(cls, args: list[str] | None = None) -> "PipelineConfig":
+        import argparse
+
+        base_config = cls.from_env()
+
+        parser = argparse.ArgumentParser(
+            description="BhuDrishti Sentinel-2 NDVI Processing Pipeline",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
+
+        parser.add_argument(
+            "-i", "--input", "--input-zip-directory",
+            dest="input_zip_directory",
+            type=str,
+            default=None,
+            help="Path to input ZIP directory containing Sentinel-2 SAFE archives"
+        )
+        parser.add_argument(
+            "-o", "--output", "--output-root-directory",
+            dest="output_root_directory",
+            type=str,
+            default=None,
+            help="Path to output root directory"
+        )
+
+        mosaic_group = parser.add_mutually_exclusive_group()
+        mosaic_group.add_argument(
+            "--create-periodic-mosaic", "--mosaic",
+            dest="create_periodic_mosaic",
+            action="store_true",
+            default=None,
+            help="Enable periodic CPU mosaic generation"
+        )
+        mosaic_group.add_argument(
+            "--no-periodic-mosaic", "--no-mosaic",
+            dest="create_periodic_mosaic",
+            action="store_false",
+            default=None,
+            help="Disable periodic CPU mosaic generation"
+        )
+
+        parsed, _ = parser.parse_known_args(args)
+
+        input_dir = Path(parsed.input_zip_directory) if parsed.input_zip_directory else base_config.input_zip_directory
+        output_dir = Path(parsed.output_root_directory) if parsed.output_root_directory else base_config.output_root_directory
+        create_mosaic = parsed.create_periodic_mosaic if parsed.create_periodic_mosaic is not None else base_config.create_periodic_mosaic
+
+        logs_dir = output_dir / "logs"
+        processed_log = logs_dir / "processing_records.jsonl"
+        skipped_log = logs_dir / "skipped_files.txt"
+
+        return cls(
+            input_zip_directory=input_dir,
+            output_root_directory=output_dir,
+            india_shapefile_path=base_config.india_shapefile_path,
+            temporary_directory=base_config.temporary_directory,
+            processed_files_log=processed_log,
+            skipped_files_log=skipped_log,
+            processing_mode=base_config.processing_mode,
+            create_periodic_mosaic=create_mosaic,
+            mosaic_method=base_config.mosaic_method,
+            block_size=base_config.block_size,
+            nodata_value=base_config.nodata_value,
         )
 
     def validate(self) -> None:

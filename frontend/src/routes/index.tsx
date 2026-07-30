@@ -26,6 +26,8 @@ import DirectoryBrowserModal from "@/components/modals/DirectoryBrowserModal";
 import { api, type ResultItem } from "@/lib/api/client";
 import { MAX_VIEWER_FILE_MB } from "@/lib/api/config";
 import { useTheme } from "@/hooks/use-theme";
+import { readNDVIGeoTIFF } from "@/lib/geotiff/read-ndvi-geotiff";
+import { GeoTIFFValidationError } from "@/lib/geotiff/errors";
 
 const GISMap = lazy(() => import("@/components/gis/GISMap"));
 
@@ -105,7 +107,7 @@ function Dashboard() {
   const aoiAbortRef = useRef<AbortController | null>(null);
   const [cartographicModalOpen, setCartographicModalOpen] = useState(false);
 
-  const { raster, selectedPixel } = useGeoTIFFStore();
+  const { raster, selectedPixel, setRaster } = useGeoTIFFStore();
 
   useEffect(() => {
     if (raster) {
@@ -148,15 +150,36 @@ function Dashboard() {
 
   // Phase 2 Integration State (Page-Level Owner)
   const [backendConnected, setBackendConnected] = useState(false);
-  const [inputRelPath, setInputRelPath] = useState<string>(
-    () => localStorage.getItem("bhudrishti_selected_input") || ""
-  );
-  const [outputRelPath, setOutputRelPath] = useState<string>(
-    () => localStorage.getItem("bhudrishti_selected_output") || ""
-  );
-  const [activeJobId, setActiveJobId] = useState<string | null>(
-    () => localStorage.getItem("bhudrishti_active_job_id") || null
-  );
+  const [inputRelPath, setInputRelPath] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return window.localStorage.getItem("bhudrishti_selected_input") || "";
+      } catch {
+        return "";
+      }
+    }
+    return "";
+  });
+  const [outputRelPath, setOutputRelPath] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return window.localStorage.getItem("bhudrishti_selected_output") || "";
+      } catch {
+        return "";
+      }
+    }
+    return "";
+  });
+  const [activeJobId, setActiveJobId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return window.localStorage.getItem("bhudrishti_active_job_id") || null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
   const [activeJobStatus, setActiveJobStatus] = useState<string | null>(null);
   const [jobSummary, setJobSummary] = useState<any | null>(null);
   const [jobResults, setJobResults] = useState<ResultItem[]>([]);
@@ -170,82 +193,136 @@ function Dashboard() {
 
   // Persist path selections
   useEffect(() => {
-    if (inputRelPath) localStorage.setItem("bhudrishti_selected_input", inputRelPath);
-    else localStorage.removeItem("bhudrishti_selected_input");
+    if (typeof window === "undefined") return;
+    try {
+      if (inputRelPath) window.localStorage.setItem("bhudrishti_selected_input", inputRelPath);
+      else window.localStorage.removeItem("bhudrishti_selected_input");
+    } catch {}
   }, [inputRelPath]);
 
   useEffect(() => {
-    if (outputRelPath) localStorage.setItem("bhudrishti_selected_output", outputRelPath);
-    else localStorage.removeItem("bhudrishti_selected_output");
+    if (typeof window === "undefined") return;
+    try {
+      if (outputRelPath) window.localStorage.setItem("bhudrishti_selected_output", outputRelPath);
+      else window.localStorage.removeItem("bhudrishti_selected_output");
+    } catch {}
   }, [outputRelPath]);
 
   // Page Refresh Recovery & Active Job Polling
   useEffect(() => {
     if (!activeJobId) {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
       return;
     }
 
+    let isSubscribed = true;
+    let timerId: number | null = null;
+    lastSeqRef.current = 0; // Reset sequence counter for new job instance
+
     const pollJob = async () => {
+      if (!isSubscribed) return;
+
       try {
         const summary = await api.getJobStatus(activeJobId);
+        if (!isSubscribed) return;
+
         setJobSummary(summary);
         setActiveJobStatus(summary.status);
 
         // Fetch events incrementally
         const evData = await api.getJobEvents(activeJobId, lastSeqRef.current);
+        if (!isSubscribed) return;
+
         if (evData.events && evData.events.length > 0) {
           lastSeqRef.current = evData.latest_sequence;
-          setLogs((prev) => [
-            ...prev,
-            ...evData.events.map((ev, idx) => ({
-              id: prev.length + idx + 1,
-              time: new Date(ev.timestamp).toLocaleTimeString("en-US", { hour12: false }),
-              level: (ev.type === "system" ? (ev.stage === "failed" ? "ERROR" : "INFO") : "INFO") as LogLevel,
-              msg: ev.message,
-            })),
-          ]);
+          setLogs((prev) => {
+            const existingSeqs = new Set(prev.map((l: any) => l.seq).filter(Boolean));
+            const newLogs = evData.events
+              .filter((ev) => !existingSeqs.has(ev.sequence))
+              .map((ev, idx) => ({
+                id: prev.length + idx + 1,
+                seq: ev.sequence,
+                time: new Date(ev.timestamp).toLocaleTimeString("en-US", { hour12: false }),
+                level: (ev.type === "system" ? (ev.stage === "failed" ? "ERROR" : "INFO") : "INFO") as LogLevel,
+                msg: ev.message,
+              }));
+            return [...prev, ...newLogs];
+          });
         }
 
         // Terminal State Handling
-        if (["SUCCEEDED", "FAILED", "CANCELLED"].includes(summary.status)) {
-          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-          localStorage.removeItem("bhudrishti_active_job_id");
+        if (["SUCCEEDED", "PARTIAL_SUCCESS", "FAILED", "CANCELLED"].includes(summary.status)) {
+          if (typeof window !== "undefined") {
+            try {
+              window.localStorage.removeItem("bhudrishti_active_job_id");
+            } catch {}
+          }
 
           if (summary.status === "SUCCEEDED") {
-            toast.success("Pipeline Succeeded", {
+            toast.success("Processing completed successfully.", {
               description: `Generated ${summary.result?.ndvi_outputs_created || 0} NDVI GeoTIFF(s).`,
             });
-            pushLog("SUCCESS", `Pipeline completed successfully! Created ${summary.result?.ndvi_outputs_created || 0} NDVI GeoTIFF(s).`);
-            // Fetch job results
+            pushLog("SUCCESS", `Processing completed successfully! Created ${summary.result?.ndvi_outputs_created || 0} NDVI GeoTIFF(s).`);
             try {
               const resList = await api.getJobResults(activeJobId);
-              setJobResults(resList.results);
+              if (isSubscribed) setJobResults(resList.results);
+              setBottomPaneExpanded(true);
+              setBottomTab("results");
+            } catch (rErr) {
+              console.error("Failed to fetch job results:", rErr);
+            }
+          } else if (summary.status === "PARTIAL_SUCCESS") {
+            toast.warning("Processing completed with some failures.", {
+              description: summary.message,
+            });
+            pushLog("WARN", `Processing completed with some failures: ${summary.message}`);
+            try {
+              const resList = await api.getJobResults(activeJobId);
+              if (isSubscribed) setJobResults(resList.results);
               setBottomPaneExpanded(true);
               setBottomTab("results");
             } catch (rErr) {
               console.error("Failed to fetch job results:", rErr);
             }
           } else if (summary.status === "FAILED") {
-            toast.error("Pipeline Failed", { description: summary.error || summary.message });
-            pushLog("ERROR", `Pipeline failed: ${summary.error || summary.message}`);
+            toast.error("Processing failed.", { description: summary.error || summary.message });
+            pushLog("ERROR", `Processing failed: ${summary.error || summary.message}`);
           } else if (summary.status === "CANCELLED") {
-            toast.info("Pipeline Cancelled", { description: "Job execution was cancelled." });
-            pushLog("WARN", "Pipeline execution cancelled.");
+            toast.info("Processing cancelled.", { description: "Job execution was cancelled." });
+            pushLog("WARN", "Processing cancelled.");
           }
+          return; // Stop polling on terminal state
         }
       } catch (err: any) {
-        console.error("Job polling error:", err);
+        if (!isSubscribed) return;
+
+        // HTTP 404 handling: Backend restarted and in-memory job was lost
+        if (err?.message?.includes("404") || err?.status === 404) {
+          toast.warning("The backend restarted and the previous in-memory job is no longer available.");
+          pushLog("WARN", "The backend restarted and the previous in-memory job is no longer available.");
+          if (typeof window !== "undefined") {
+            try {
+              window.localStorage.removeItem("bhudrishti_active_job_id");
+            } catch {}
+          }
+          setActiveJobId(null);
+          setJobSummary(null);
+          setActiveJobStatus("IDLE");
+          return; // Stop polling completely
+        }
+      }
+
+      // Schedule next non-overlapping poll if job remains active
+      if (isSubscribed) {
+        timerId = window.setTimeout(pollJob, 1000);
       }
     };
 
     pollJob();
-    pollTimerRef.current = setInterval(pollJob, 1000);
 
     return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      isSubscribed = false;
+      if (timerId !== null) window.clearTimeout(timerId);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJobId]);
 
   const pushLog = (level: LogLevel, msg: string) => {
@@ -283,7 +360,11 @@ function Dashboard() {
       lastSeqRef.current = 0;
       setActiveJobId(res.job_id);
       setActiveJobStatus(res.status);
-      localStorage.setItem("bhudrishti_active_job_id", res.job_id);
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem("bhudrishti_active_job_id", res.job_id);
+        } catch {}
+      }
       toast.success("Job Submitted", { description: `Job ${res.job_id.slice(0, 8)} queued in single-worker queue.` });
     } catch (err: any) {
       toast.error("Job Submission Failed", { description: err.message });
@@ -302,7 +383,7 @@ function Dashboard() {
     }
   };
 
-  // Open generated output in viewer (Directive 9, 20)
+  // Open generated output in viewer (Prompt 1)
   const handleOpenResultInViewer = async (result: ResultItem) => {
     const sizeMB = result.size_bytes / (1024 * 1024);
     if (sizeMB > MAX_VIEWER_FILE_MB) {
@@ -323,12 +404,34 @@ function Dashboard() {
       const blob = await res.blob();
       const file = new File([blob], result.filename, { type: "image/tiff" });
 
-      // Open in existing GeoTIFF Modal flow
-      setGeoTIFFModalOpen(true);
-      pushLog("SUCCESS", `Loaded server result "${result.filename}" into GeoTIFF parser.`);
-    } catch (err: any) {
-      toast.error("Failed to load result file", { description: err.message });
-      pushLog("ERROR", `Could not fetch result file: ${err.message}`);
+      pushLog("INFO", `Reading candidate result file: ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB)...`);
+
+      // Pass File through the exact existing local GeoTIFF parsing workflow
+      const candidateRaster = await readNDVIGeoTIFF(file, (level: LogLevel, msg: string) => {
+        pushLog(level, msg);
+      });
+
+      // Commit parsed raster to existing GeoTIFF store
+      setRaster(candidateRaster);
+
+      pushLog(
+        "SUCCESS",
+        `GeoTIFF ${candidateRaster.fileName} loaded successfully into map viewer (${candidateRaster.width}x${candidateRaster.height}, ${candidateRaster.crs}). Min=${candidateRaster.statistics.minimum}, Max=${candidateRaster.statistics.maximum}`
+      );
+
+      toast.success("Result loaded into viewer", {
+        description: `${candidateRaster.fileName} is now active on the map workspace.`,
+      });
+    } catch (err: unknown) {
+      // Keep previous valid raster unchanged, show validation error message
+      let msg = "Failed to parse GeoTIFF result";
+      if (err instanceof GeoTIFFValidationError) {
+        msg = err.message;
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
+      toast.error("Failed to load result in viewer", { description: msg });
+      pushLog("ERROR", `Could not load result into viewer: ${msg}`);
     }
   };
 

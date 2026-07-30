@@ -47,6 +47,7 @@ Outputs/
 
 # Python
 __pycache__/
+scratch/
 *.py[cod]
 .venv/
 venv/

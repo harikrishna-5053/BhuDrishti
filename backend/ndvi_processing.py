@@ -36,78 +36,61 @@ def generate_ndvi(red_path, nir_path, scl_resampled, logger=None):
         if red_ds is None or nir_ds is None:
             raise Exception("Cannot open RED/NIR band")
 
-        red = red_ds.ReadAsArray().astype(np.float32)
-        nir = nir_ds.ReadAsArray().astype(np.float32)
-
-        red = np.squeeze(red)
-        nir = np.squeeze(nir)
+        if (red_ds.RasterXSize != nir_ds.RasterXSize) or (red_ds.RasterYSize != nir_ds.RasterYSize):
+            raise Exception(f"Shape mismatch RED:({red_ds.RasterXSize}x{red_ds.RasterYSize}) NIR:({nir_ds.RasterXSize}x{nir_ds.RasterYSize})")
 
         # ==================================================
-        # SHAPE CHECK
+        # BLOCKWISE NDVI COMPUTATION (Memory Bounded)
         # ==================================================
+        width = red_ds.RasterXSize
+        height = red_ds.RasterYSize
+        block_size = 2048
 
-        if red.shape != nir.shape:
-            raise Exception(f"Shape mismatch RED:{red.shape} NIR:{nir.shape}")
+        red_band = red_ds.GetRasterBand(1)
+        nir_band = nir_ds.GetRasterBand(1)
+        scl_band = scl_resampled.GetRasterBand(1)
 
-        # ==================================================
-        # NODATA HANDLING
-        # ==================================================
+        red_nodata = red_band.GetNoDataValue()
+        nir_nodata = nir_band.GetNoDataValue()
 
-        red_nodata = red_ds.GetRasterBand(1).GetNoDataValue()
-        nir_nodata = nir_ds.GetRasterBand(1).GetNoDataValue()
+        # SCL classes to mask as invalid/nodata (-9999.0):
+        # 0: No Data, 1: Saturated/Defective, 2: Dark Area / Cast Shadows,
+        # 3: Cloud Shadows, 8: Cloud Medium Prob, 9: Cloud High Prob, 10: Thin Cirrus
+        invalid_scl = {0, 1, 2, 3, 8, 9, 10}
 
-        valid_mask = np.ones(red.shape, dtype=bool)
-
-        valid_mask &= (red > 0)
-        valid_mask &= (nir > 0)
-
-        if red_nodata is not None:
-            valid_mask &= (red != red_nodata)
-
-        if nir_nodata is not None:
-            valid_mask &= (nir != nir_nodata)
-
-        # ==================================================
-        # OPEN SCL
-        # ==================================================
-
-        scl = np.squeeze(scl_resampled.ReadAsArray())
-
-        # ==================================================
-        # CLOUD / INVALID MASK
-        # ==================================================
-
-        invalid_scl = {
-            0, 1, 3, 8, 9, 10, 11
-        }
-
-        valid_mask &= ~np.isin(scl, list(invalid_scl))
-
-        # ==================================================
-        # NDVI COMPUTATION
-        # ==================================================
-
-        ndvi = np.full(red.shape, -9999, dtype=np.float32)
+        ndvi = np.full((height, width), -9999.0, dtype=np.float32)
         compute_start = time.perf_counter()
 
-        denom = nir + red
+        for yoff in range(0, height, block_size):
+            ysize = min(block_size, height - yoff)
+            for xoff in range(0, width, block_size):
+                xsize = min(block_size, width - xoff)
 
-        valid_mask &= (denom != 0)
+                r_blk = red_band.ReadAsArray(xoff, yoff, xsize, ysize).astype(np.float32)
+                n_blk = nir_band.ReadAsArray(xoff, yoff, xsize, ysize).astype(np.float32)
+                s_blk = np.squeeze(scl_band.ReadAsArray(xoff, yoff, xsize, ysize))
 
-        ndvi_vals = np.zeros_like(red, dtype=np.float32)
+                valid = (r_blk > 0) & (n_blk > 0)
+                if red_nodata is not None:
+                    valid &= (r_blk != red_nodata)
+                if nir_nodata is not None:
+                    valid &= (n_blk != nir_nodata)
 
-        np.divide(
-            nir - red,
-            denom,
-            out=ndvi_vals,
-            where=valid_mask
-        )
+                valid &= ~np.isin(s_blk, list(invalid_scl))
 
-        ndvi[valid_mask] = ndvi_vals[valid_mask]
+                denom = n_blk + r_blk
+                valid &= (denom != 0)
+
+                blk_ndvi = np.zeros((ysize, xsize), dtype=np.float32)
+                np.divide(n_blk - r_blk, denom, out=blk_ndvi, where=valid)
+
+                sub_out = ndvi[yoff : yoff + ysize, xoff : xoff + xsize]
+                sub_out[valid] = blk_ndvi[valid]
+
         compute_end = time.perf_counter()
 
         print("\n==============================")
-        print(f"CPU NDVI COMPUTATION TIME : {compute_end-compute_start:.6f} seconds")
+        print(f"CPU BLOCKWISE NDVI COMPUTATION TIME : {compute_end-compute_start:.6f} seconds")
         print("==============================")
 
         # ==================================================

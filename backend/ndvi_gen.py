@@ -1,8 +1,28 @@
-from osgeo import gdal
-import numpy as np
-import cupy as cp
-import time
-gdal.UseExceptions()
+try:
+    from osgeo import gdal
+except ImportError:
+    try:
+        import gdal
+    except ImportError:
+        gdal = None
+
+try:
+    import cupy as cp
+    HAS_CUPY = True
+except ImportError:
+    cp = None
+    HAS_CUPY = False
+
+if gdal and hasattr(gdal, "UseExceptions"):
+    gdal.UseExceptions()
+
+def is_gpu_available() -> bool:
+    if not HAS_CUPY or cp is None:
+        return False
+    try:
+        return cp.cuda.runtime.getDeviceCount() > 0
+    except Exception:
+        return False
 
 # ==========================================================
 # NDVI GENERATION MODULE
@@ -65,11 +85,10 @@ def generate_ndvi(red_path, nir_path, scl_resampled, logger=None):
             np.squeeze(scl_resampled.ReadAsArray())
         )
 
-        # ==================================================
-        # CLOUD / INVALID MASK
-        # ==================================================
-
-        invalid_scl = cp.array([0,1,3,8,9,10,11], dtype=cp.uint8)
+        # SCL classes to mask as invalid/nodata (-9999.0):
+        # 0: No Data, 1: Saturated/Defective, 2: Dark Area / Cast Shadows,
+        # 3: Cloud Shadows, 8: Cloud Medium Prob, 9: Cloud High Prob, 10: Thin Cirrus
+        invalid_scl = cp.array([0, 1, 2, 3, 8, 9, 10], dtype=cp.uint8)
         valid_mask &= ~cp.isin(scl, invalid_scl)
 
         # ==================================================

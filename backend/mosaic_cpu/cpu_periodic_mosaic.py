@@ -16,51 +16,47 @@ if gdal and hasattr(gdal, "SetCacheMax"):
 
 
 def get_date_from_filename(filename):
-
     filename = os.path.basename(filename)
 
-    # Prefer the first datetime because it represents
-    # the Sentinel acquisition/sensing time.
-    match = re.search(
-        r"_(\d{8})T\d{6}_",
-        filename
-    )
+    # 1. Prefer Sentinel-2 acquisition/sensing timestamp: _YYYYMMDDTHHMMSS_
+    match = re.search(r"_(\d{8})T\d{6}_", filename)
+    if match:
+        try:
+            return datetime.strptime(match.group(1), "%Y%m%d")
+        except ValueError:
+            pass
 
-    if match is None:
-        print(
-            f"Unable to extract date from filename: {filename}"
-        )
-        return None
+    # 2. Match DDMMMYYYY format (e.g. 18MAR2026)
+    match = re.search(r"(\d{2})([A-Z]{3})(\d{4})", filename.upper())
+    if match:
+        try:
+            day, month_str, year = match.groups()
+            return datetime.strptime(f"{day}{month_str}{year}", "%d%b%Y")
+        except ValueError:
+            pass
 
-    date_text = match.group(1)
+    # 3. Fallback to any 8-digit date string YYYYMMDD
+    match = re.search(r"(\d{4})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])", filename)
+    if match:
+        try:
+            return datetime.strptime(match.group(0), "%Y%m%d")
+        except ValueError:
+            pass
 
-    try:
-        return datetime.strptime(
-            date_text,
-            "%Y%m%d"
-        )
-
-    except ValueError:
-        print(
-            f"Invalid date found in filename: {filename}"
-        )
-        return None
+    return None
 
 
 def get_period(date):
     """
-    Return the ten-day period for a given date.
+    Return the ten-day period for a given date (01_10, 11_20, 21_END).
     """
-
     day = date.day
-
     if day <= 10:
         return "01_10"
-
-    if day <= 20:
+    elif day <= 20:
         return "11_20"
-
-    return "21_31"
+    else:
+        return "21_END"
 
 
 def collect_ndvi_files(output_root):
@@ -98,20 +94,29 @@ def collect_ndvi_files(output_root):
             if "mosaic" in filename_lower:
                 continue
 
-            files.append(
-                os.path.join(
-                    root,
-                    filename
+    ndvi_files = []
+
+    for root, dirs, files in os.walk(output_root):
+
+        if "MOSAIC" in root.split(os.sep):
+            continue
+
+        for file in files:
+            if file.endswith(".tif") or file.endswith(".tiff"):
+                ndvi_files.append(
+                    os.path.join(root, file)
                 )
-            )
 
-    return files
+    return ndvi_files
 
-def create_cpu_periodic_mosaics(output_root):
+
+def create_cpu_periodic_mosaics(output_root) -> list[str]:
 
     print(
         "\nScanning NDVI files for CPU mosaic..."
     )
+
+    created_mosaic_files: list[str] = []
 
     ndvi_files = collect_ndvi_files(
         output_root
@@ -119,17 +124,12 @@ def create_cpu_periodic_mosaics(output_root):
 
     if not ndvi_files:
         print("No NDVI files found")
-        return
+        return []
 
     print(
         f"Total NDVI files found: {len(ndvi_files)}"
     )
 
-    # Important:
-    # Group by year and month also, not only by period.
-    #
-    # Otherwise files from May, June, July, etc. having
-    # the same period could be placed in one mosaic.
     groups = {}
 
     for file_path in ndvi_files:
@@ -157,21 +157,11 @@ def create_cpu_periodic_mosaics(output_root):
             []
         ).append(file_path)
 
-        print(
-            f"Detected: {os.path.basename(file_path)}"
-        )
-        print(
-            f"Date    : {date.strftime('%Y-%m-%d')}"
-        )
-        print(
-            f"Period  : {period}"
-        )
-
     if not groups:
         print(
             "No valid NDVI files could be grouped"
         )
-        return
+        return []
 
     mosaic_root = os.path.join(
         output_root,
@@ -196,28 +186,6 @@ def create_cpu_periodic_mosaics(output_root):
             month_number,
             1
         ).strftime("%B").upper()
-
-        print(
-            "\n======================================"
-        )
-        print(
-            f"Creating CPU mosaic: "
-            f"{period} {month_name} {year}"
-        )
-        print(
-            f"Input files: {len(files)}"
-        )
-        print(
-            "======================================"
-        )
-
-        for index, file_path in enumerate(
-            files,
-            start=1
-        ):
-            print(
-                f"{index}. {file_path}"
-            )
 
         output_dir = os.path.join(
             mosaic_root,
@@ -251,12 +219,18 @@ def create_cpu_periodic_mosaics(output_root):
 
         mosaic.create_mosaic()
 
-        print(
-            "\nCPU mosaic created successfully:"
-        )
-        print(
-            output_file
-        )
+        val_ok, val_err = validate_output_tiff(output_file)
+        if val_ok:
+            created_mosaic_files.append(output_file)
+            print(
+                f"\nCPU mosaic created and validated successfully: {output_file}"
+            )
+        else:
+            print(
+                f"\nMosaic validation failed for {output_file}: {val_err}"
+            )
+
+    return created_mosaic_files
 
 
 if __name__ == "__main__":

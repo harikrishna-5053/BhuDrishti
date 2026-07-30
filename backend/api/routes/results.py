@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 
 from api.job_manager import get_job_manager
+from api.routes.filesystem import is_contained_in_root
 from api.schemas import JobResultsResponse, ResultItem
 
 router = APIRouter(prefix="/api/jobs", tags=["results"])
@@ -48,8 +49,8 @@ def download_job_result(job_id: str, result_id: str):
     file_path = Path(res_data["absolute_path"]).resolve()
     job_out_dir = Path(job["output_directory"]).resolve()
 
-    # Enforce boundary ownership check
-    if not str(file_path).startswith(str(job_out_dir)):
+    # Enforce strict boundary containment check
+    if not is_contained_in_root(file_path, job_out_dir):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to requested file location.")
 
     if not file_path.exists():
@@ -58,5 +59,30 @@ def download_job_result(job_id: str, result_id: str):
     return FileResponse(
         path=str(file_path),
         filename=res_data["filename"],
+        media_type="image/tiff"
+    )
+
+@router.get("/{job_id}/results/{result_id}/preview")
+def get_job_result_preview(job_id: str, result_id: str):
+    manager = get_job_manager()
+    job = manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Job '{job_id}' not found.")
+
+    results_map = job.get("results_map", {})
+    res_data = results_map.get(result_id)
+    if not res_data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Result '{result_id}' not found.")
+
+    file_path = Path(res_data["absolute_path"]).resolve()
+    job_out_dir = Path(job["output_directory"]).resolve()
+
+    if not is_contained_in_root(file_path, job_out_dir) or not file_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File unavailable.")
+
+    # Return file directly for fast browser preview
+    return FileResponse(
+        path=str(file_path),
+        filename=f"preview_{res_data['filename']}",
         media_type="image/tiff"
     )

@@ -13,13 +13,18 @@ class ExtractionResult:
     safe_roots: List[Path]
     error_message: Optional[str]
 
-def is_safe_member_path(member_path: str, target_dir: Path) -> Tuple[bool, Optional[str]]:
+def is_safe_member(member: zipfile.ZipInfo, target_dir: Path) -> Tuple[bool, Optional[str]]:
     r"""
-    Validates that an archive member path does not attempt path traversal
-    and remains strictly within the intended extraction directory.
+    Validates that an archive member path does not attempt path traversal,
+    is not a symbolic link escape, and remains strictly within target_dir.
     Explicitly rejects Windows drive paths (C:\, C:/) and UNC network paths (\\, //).
     """
-    clean_path = member_path.replace("\\", "/")
+    member_path = member.filename
+    clean_path = member_path.replace("\\", "/").strip()
+
+    # Reject symbolic links (mode 0o120000 in Unix external attributes)
+    if (member.external_attr >> 16) & 0o170000 == 0o120000:
+        return False, f"Member is a symbolic link: {member_path}"
 
     # Reject Windows drive prefix (e.g. C:\ or C:/)
     if len(clean_path) >= 2 and clean_path[1] == ":":
@@ -37,13 +42,22 @@ def is_safe_member_path(member_path: str, target_dir: Path) -> Tuple[bool, Optio
     try:
         resolved_target = target_dir.resolve()
         resolved_dest = (target_dir / clean_path).resolve()
-        # Verify destination path is inside target directory
-        if not str(resolved_dest).startswith(str(resolved_target)):
+
+        if hasattr(resolved_dest, "is_relative_to"):
+            is_contained = resolved_dest.is_relative_to(resolved_target)
+        else:
+            is_contained = os.path.commonpath([str(resolved_target), str(resolved_dest)]) == str(resolved_target)
+
+        if not is_contained:
             return False, f"Member path attempts traversal outside target directory: {member_path}"
     except Exception as e:
         return False, f"Member path resolution failed: {member_path} | {e}"
 
     return True, None
+
+def is_safe_member_path(member_path: str, target_dir: Path) -> Tuple[bool, Optional[str]]:
+    dummy = zipfile.ZipInfo(filename=member_path)
+    return is_safe_member(dummy, target_dir)
 
 def extract_zip_safely(zip_path: str, target_temp_root: Optional[str] = None, logger=None) -> ExtractionResult:
     """
@@ -72,7 +86,7 @@ def extract_zip_safely(zip_path: str, target_temp_root: Optional[str] = None, lo
 
             # 1. PRE-VALIDATE ALL MEMBERS BEFORE EXTRACTING ANY FILE
             for member in member_list:
-                is_safe, err_reason = is_safe_member_path(member.filename, extract_dir)
+                is_safe, err_reason = is_safe_member(member, extract_dir)
                 if not is_safe:
                     msg = f"Unsafe archive member rejected in '{os.path.basename(zip_path)}': {err_reason}"
                     if logger:

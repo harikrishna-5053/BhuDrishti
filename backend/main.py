@@ -27,6 +27,9 @@ except ImportError:
     except ImportError:
         gdal = None
 
+if gdal and hasattr(gdal, "SetCacheMax"):
+    gdal.SetCacheMax(512 * 1024 * 1024)
+
 @dataclass
 class PipelineResult:
     total_zip_files: int = 0
@@ -40,6 +43,7 @@ class PipelineResult:
     elapsed_seconds: float = 0.0
     output_files: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
+    cancelled: bool = False
 
 def get_acquisition_date(zip_path: str) -> datetime:
     name = os.path.basename(zip_path).upper()
@@ -87,7 +91,13 @@ def run_pipeline(
 
     # Check GPU mode limitation
     if config.processing_mode == "gpu":
-        emit_log("WARNING", "GPU processing mode requested, but Phase 1 preserves active CPU processing behavior for maximum reliability.")
+        from ndvi_gen import is_gpu_available
+        if not is_gpu_available():
+            raise ConfigurationError(
+                "GPU processing mode requested, but CuPy with CUDA hardware is unavailable on this system. "
+                "Please install CUDA drivers & CuPy or switch processing_mode to 'cpu'."
+            )
+        emit_log("INFO", "GPU processing mode validated and active.")
 
     output_root_final = config.output_root_directory / "OUTPUT"
     output_root_final.mkdir(parents=True, exist_ok=True)
@@ -126,6 +136,7 @@ def run_pipeline(
     for idx, zip_path in enumerate(zip_files):
         # Cancellation Checkpoint 1: Before starting ZIP
         if cancel_event and getattr(cancel_event, "is_set", lambda: False)():
+            result.cancelled = True
             emit_log("WARNING", "Pipeline cancelled by user before processing ZIP.")
             break
 
@@ -181,6 +192,7 @@ def run_pipeline(
 
         # Cancellation Checkpoint 2: Before extracting
         if cancel_event and getattr(cancel_event, "is_set", lambda: False)():
+            result.cancelled = True
             emit_log("WARNING", "Pipeline cancelled by user before extraction.")
             break
 
@@ -234,6 +246,7 @@ def run_pipeline(
                 for tile_id, band_set in tiles.items():
                     # Cancellation Checkpoint 3: Before processing tile
                     if cancel_event and getattr(cancel_event, "is_set", lambda: False)():
+                        result.cancelled = True
                         emit_log("WARNING", f"Pipeline cancelled before tile {tile_id}.")
                         break
 
@@ -352,10 +365,14 @@ def run_pipeline(
                     "message": "Generating CPU Periodic NDVI Mosaics"
                 })
             try:
-                create_cpu_periodic_mosaics(str(output_root_final))
-                result.mosaic_outputs_created += 1
-                print("\nCPU Periodic Mosaics Created Successfully")
-                emit_log("INFO", "CPU Periodic Mosaics Created Successfully")
+                created_mosaics = create_cpu_periodic_mosaics(str(output_root_final))
+                if created_mosaics:
+                    result.mosaic_outputs_created += len(created_mosaics)
+                    result.output_files.extend(created_mosaics)
+                    print(f"\nCPU Periodic Mosaics Created Successfully: {len(created_mosaics)} mosaic file(s)")
+                    emit_log("INFO", f"CPU Periodic Mosaics Created Successfully: {len(created_mosaics)} mosaic file(s)")
+                else:
+                    print("\nNo periodic mosaics created.")
             except Exception as e:
                 msg = f"CPU Periodic Mosaic Failed: {e}"
                 print("CPU Periodic Mosaic Failed")
@@ -383,7 +400,7 @@ def run_pipeline(
 if __name__ == "__main__":
     # Command-line entrypoint
     try:
-        cfg = PipelineConfig.from_env()
+        cfg = PipelineConfig.from_args()
         run_pipeline(cfg)
     except ConfigurationError as err:
         print(f"\n[CONFIGURATION ERROR] {err}")

@@ -36,7 +36,8 @@ def save_ndvi_tiff(ndvi, reference_ds, output_tif, logger=None):
         ndvi.shape[1],
         ndvi.shape[0],
         1,
-        gdal.GDT_Float32
+        gdal.GDT_Float32,
+        options=["COMPRESS=LZW", "TILED=YES"]
     )
 
     if out_ds is None:
@@ -44,9 +45,12 @@ def save_ndvi_tiff(ndvi, reference_ds, output_tif, logger=None):
 
     out_ds.SetGeoTransform(reference_ds.GetGeoTransform())
     out_ds.SetProjection(reference_ds.GetProjection())
+    out_ds.SetMetadataItem("TITLE", "BhuDrishti Sentinel-2 Tile NDVI")
+    out_ds.SetMetadataItem("PROCESSING_ENGINE", "BhuDrishti Python Pipeline")
+    out_ds.SetMetadataItem("NODATA", "-9999.0")
 
     band = out_ds.GetRasterBand(1)
-    band.SetNoDataValue(-9999)
+    band.SetNoDataValue(-9999.0)
     band.WriteArray(ndvi)
 
     band.FlushCache()

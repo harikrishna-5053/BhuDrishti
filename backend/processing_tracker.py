@@ -1,5 +1,6 @@
 import os
 import json
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
@@ -48,12 +49,14 @@ def validate_output_tiff(filepath: str, expected_nodata: Optional[float] = -9999
 
         actual_nodata = band.GetNoDataValue()
         if actual_nodata is None:
-            return False, f"GeoTIFF nodata value is missing (GetNoDataValue() returned None) in {filepath}"
+            return False, f"Output raster does not define a nodata value in {filepath}"
         
         # Explicit check: distinguish missing nodata from zero or expected nodata
         if expected_nodata is not None and abs(actual_nodata - expected_nodata) > 1e-4:
-            # If expected_nodata was -9999.0 but actual is 0.0 or something else, report
-            pass
+            return False, (
+                f"Unexpected nodata value in {filepath}: expected {expected_nodata}, "
+                f"found {actual_nodata}"
+            )
 
     except Exception as e:
         return False, f"Exception validating GeoTIFF {filepath}: {e}"
@@ -67,10 +70,12 @@ class ProcessingTracker:
     """
     Manages JSON Lines processing records (backend/logs/processing_records.jsonl).
     Maintains read-only fallback compatibility with legacy processed_files.txt.
+    Thread-safe implementation using threading.Lock().
     """
     def __init__(self, jsonl_log_path: Path, legacy_processed_txt: Optional[Path] = None):
         self.jsonl_path = Path(jsonl_log_path)
         self.legacy_txt_path = Path(legacy_processed_txt) if legacy_processed_txt else None
+        self._lock = threading.Lock()
 
         self.processed_zips: Set[str] = set()
         self.skipped_outside_india_zips: Set[str] = set()
@@ -111,10 +116,12 @@ class ProcessingTracker:
                 print(f"Warning: Could not load JSONL processing records: {e}")
 
     def is_processed(self, zip_name: str) -> bool:
-        return zip_name in self.processed_zips
+        with self._lock:
+            return zip_name in self.processed_zips
 
     def is_skipped_outside_india(self, zip_name: str) -> bool:
-        return zip_name in self.skipped_outside_india_zips
+        with self._lock:
+            return zip_name in self.skipped_outside_india_zips
 
     def record_status(
         self,
@@ -141,18 +148,19 @@ class ProcessingTracker:
             "processed_at": datetime.utcnow().isoformat() + "Z",
         }
 
-        # Update in-memory index
-        self.records[zip_name] = record
-        if status == "PROCESSED":
-            self.processed_zips.add(zip_name)
-        elif status == "SKIPPED" and "Outside India" in reason:
-            self.skipped_outside_india_zips.add(zip_name)
+        with self._lock:
+            # Update in-memory index
+            self.records[zip_name] = record
+            if status == "PROCESSED":
+                self.processed_zips.add(zip_name)
+            elif status == "SKIPPED" and "Outside India" in reason:
+                self.skipped_outside_india_zips.add(zip_name)
 
-        # Append to JSONL file using safe append semantics (flush + fsync)
-        self.jsonl_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.jsonl_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record) + "\n")
-            f.flush()
-            os.fsync(f.fileno())
+            # Append to JSONL file using safe append semantics (flush + fsync)
+            self.jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.jsonl_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
 
         return record

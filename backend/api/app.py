@@ -14,6 +14,7 @@ from api.job_manager import get_job_manager
 from api.routes.filesystem import router as filesystem_router
 from api.routes.jobs import router as jobs_router
 from api.routes.results import router as results_router
+from api.routes.analytics import router as analytics_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -68,6 +69,7 @@ def get_health():
 app.include_router(filesystem_router)
 app.include_router(jobs_router)
 app.include_router(results_router)
+app.include_router(analytics_router)
 
 if __name__ == "__main__":
     import uvicorn

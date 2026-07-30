@@ -98,16 +98,16 @@ class GeoTiffWriter:
 
     def set_nodata(
             self,
-            value=-9999
+            value=-9999.0
     ):
 
-
         band = self.dataset.GetRasterBand(1)
+        band.SetNoDataValue(float(value))
 
-
-        band.SetNoDataValue(
-            value
-        )
+    def set_metadata(self, metadata: dict):
+        if self.dataset and isinstance(metadata, dict):
+            for k, v in metadata.items():
+                self.dataset.SetMetadataItem(str(k), str(v))
 
 
 

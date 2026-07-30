@@ -83,10 +83,34 @@ export default function Header({
   };
 
   useEffect(() => {
-    checkHealth();
-    const interval = setInterval(checkHealth, 20000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let timerId: number | null = null;
+    let cancelled = false;
+
+    const runHealthCheck = async () => {
+      try {
+        await api.getHealth();
+        if (!cancelled) {
+          setBackendStatus("connected");
+          onBackendStatusChange?.(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setBackendStatus("disconnected");
+          onBackendStatusChange?.(false);
+        }
+      } finally {
+        if (!cancelled) {
+          timerId = window.setTimeout(runHealthCheck, 20000);
+        }
+      }
+    };
+
+    runHealthCheck();
+
+    return () => {
+      cancelled = true;
+      if (timerId !== null) window.clearTimeout(timerId);
+    };
   }, []);
 
   return (

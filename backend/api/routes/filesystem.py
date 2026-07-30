@@ -18,6 +18,22 @@ RESERVED_WINDOWS_NAMES = {
 def get_config() -> PipelineConfig:
     return PipelineConfig.from_env()
 
+def is_contained_in_root(target_path: Path, root_path: Path) -> bool:
+    """
+    Returns True iff resolved target_path is equal to or inside resolved root_path.
+    Prevents sibling prefix attacks (e.g. C:\\data\\input_evil vs C:\\data\\input).
+    """
+    try:
+        res_target = target_path.resolve()
+        res_root = root_path.resolve()
+
+        if hasattr(res_target, "is_relative_to"):
+            return res_target.is_relative_to(res_root)
+
+        return os.path.commonpath([str(res_root), str(res_target)]) == str(res_root)
+    except (ValueError, RuntimeError):
+        return False
+
 def resolve_safe_path(root_path: Path, relative_path: str) -> Path:
     """
     Resolves relative_path under root_path and asserts the target path
@@ -48,8 +64,8 @@ def resolve_safe_path(root_path: Path, relative_path: str) -> Path:
         resolved_root = root_path.resolve()
         target_path = (root_path / clean_rel).resolve()
 
-        # Enforce boundary check
-        if not str(target_path).startswith(str(resolved_root)):
+        # Enforce strict boundary containment check
+        if not is_contained_in_root(target_path, resolved_root):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied: Path '{relative_path}' attempts traversal outside allowed root."
@@ -127,7 +143,7 @@ def list_directories(
         current_rel = ""
     else:
         parent_dir = resolved_target.parent
-        if str(parent_dir).startswith(str(resolved_root)):
+        if is_contained_in_root(parent_dir, resolved_root):
             try:
                 parent_rel = str(parent_dir.relative_to(resolved_root)).replace("\\", "/")
                 if parent_rel == ".":
@@ -178,7 +194,7 @@ def create_directory(req: CreateDirectoryRequest):
     new_dir = (parent_dir / req.directory_name.strip()).resolve()
     resolved_root = root.resolve()
 
-    if not str(new_dir).startswith(str(resolved_root)):
+    if not is_contained_in_root(new_dir, resolved_root):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot create directory outside output root.")
 
     try:

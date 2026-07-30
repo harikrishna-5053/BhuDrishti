@@ -56,6 +56,9 @@ export default function BottomPane({
   onOpenResult,
   onExportGeoTIFF,
   onViewResultGauge,
+  jobResults = [],
+  onOpenResultInViewer,
+  onDownloadResult,
 }: {
   expanded: boolean;
   onToggleExpand: () => void;
@@ -70,6 +73,9 @@ export default function BottomPane({
   onOpenResult?: (name: string, year: number) => void;
   onExportGeoTIFF?: (name: string) => void;
   onViewResultGauge?: (name: string) => void;
+  jobResults?: any[];
+  onOpenResultInViewer?: (res: any) => void;
+  onDownloadResult?: (res: any) => void;
 }) {
   const { raster } = useGeoTIFFStore();
   const point = clicked ?? { lat: 22.9, lng: 79.1 };
