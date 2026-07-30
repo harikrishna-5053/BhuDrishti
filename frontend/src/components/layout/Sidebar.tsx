@@ -17,7 +17,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
+import { useRef, type Dispatch, type SetStateAction } from "react";
 import type { LayerState } from "@/components/gis/GISMap";
 import type { LogLevel } from "@/lib/types";
 import { useGeoTIFFStore } from "@/stores/geotiff-store";
@@ -127,7 +127,6 @@ export default function Sidebar({
             activeJobId={activeJobId}
             activeJobStatus={activeJobStatus}
             jobSummary={jobSummary}
-            onOpenBrowser={onOpenBrowser}
             onGenerateNDVI={onGenerateNDVI}
             onCancelJob={onCancelJob}
           />
@@ -218,7 +217,6 @@ function NDVIGenerationSection({
   activeJobId,
   activeJobStatus,
   jobSummary,
-  onOpenBrowser,
   onGenerateNDVI,
   onCancelJob,
 }: {
@@ -230,18 +228,82 @@ function NDVIGenerationSection({
   activeJobId: string | null;
   activeJobStatus: string | null;
   jobSummary: any;
-  onOpenBrowser: (scope: "input" | "output") => void;
   onGenerateNDVI: () => void;
   onCancelJob: () => void;
 }) {
   const isJobActive = activeJobId && ["QUEUED", "RUNNING", "CANCELLING"].includes(activeJobStatus || "");
   const isCancelling = activeJobStatus === "CANCELLING";
 
+  const inputFolderRef = useRef<HTMLInputElement>(null);
+  const outputFolderRef = useRef<HTMLInputElement>(null);
+
+  const handlePickNativeFolder = async (
+    targetRef: React.RefObject<HTMLInputElement | null>,
+    onSelect: (path: string) => void
+  ) => {
+    if ("showDirectoryPicker" in window) {
+      try {
+        const handle = await (window as any).showDirectoryPicker();
+        if (handle && handle.name) {
+          onSelect(handle.name);
+          return;
+        }
+      } catch (err: any) {
+        if (err.name === "AbortError") return;
+      }
+    }
+    targetRef.current?.click();
+  };
+
   return (
     <section className="glass-panel rounded-xl p-3 bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-2.5">
       <SectionHeader icon={FolderKanban} title="NDVI Pipeline Paths" />
 
-      {/* Input Path Input Field + Folder Symbol Button */}
+      {/* Hidden Native File Explorer Inputs */}
+      <input
+        type="file"
+        ref={inputFolderRef}
+        // @ts-ignore
+        webkitdirectory=""
+        directory=""
+        className="hidden"
+        onChange={(e) => {
+          const files = e.target.files;
+          if (files && files.length > 0) {
+            const first = files[0];
+            const folderName = first.webkitRelativePath
+              ? first.webkitRelativePath.split("/")[0]
+              : first.name;
+            const fullPath = (first as any).path
+              ? (first as any).path.replace(/[\\/][^\\/]+$/, "")
+              : folderName;
+            onChangeInputPath(fullPath || folderName);
+          }
+        }}
+      />
+      <input
+        type="file"
+        ref={outputFolderRef}
+        // @ts-ignore
+        webkitdirectory=""
+        directory=""
+        className="hidden"
+        onChange={(e) => {
+          const files = e.target.files;
+          if (files && files.length > 0) {
+            const first = files[0];
+            const folderName = first.webkitRelativePath
+              ? first.webkitRelativePath.split("/")[0]
+              : first.name;
+            const fullPath = (first as any).path
+              ? (first as any).path.replace(/[\\/][^\\/]+$/, "")
+              : folderName;
+            onChangeOutputPath(fullPath || folderName);
+          }
+        }}
+      />
+
+      {/* Input Path Input Field + Native Folder Button */}
       <div className="space-y-1">
         <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
           Input Folder (Sentinel-2 ZIPs)
@@ -251,15 +313,15 @@ function NDVIGenerationSection({
             type="text"
             value={inputRelPath}
             onChange={(e) => onChangeInputPath(e.target.value)}
-            placeholder="e.g. data/input_zips or relative path"
+            placeholder="Type input path..."
             disabled={!backendConnected || !!isJobActive}
             className="flex-1 min-w-0 rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 transition focus:border-primary focus:outline-none disabled:opacity-50 font-mono"
           />
           <button
             type="button"
-            onClick={() => onOpenBrowser("input")}
+            onClick={() => handlePickNativeFolder(inputFolderRef, onChangeInputPath)}
             disabled={!backendConnected || !!isJobActive}
-            title="Browse File Explorer"
+            title="Open File Explorer"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-[var(--surface-1)] text-primary hover:border-primary/60 hover:bg-[var(--surface-2)] disabled:opacity-50 transition cursor-pointer"
           >
             <FolderOpen className="h-4 w-4" />
@@ -267,7 +329,7 @@ function NDVIGenerationSection({
         </div>
       </div>
 
-      {/* Output Path Input Field + Folder Symbol Button */}
+      {/* Output Path Input Field + Native Folder Button */}
       <div className="space-y-1">
         <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
           Output Folder (Generated Rasters)
@@ -277,15 +339,15 @@ function NDVIGenerationSection({
             type="text"
             value={outputRelPath}
             onChange={(e) => onChangeOutputPath(e.target.value)}
-            placeholder="e.g. data/output or relative path"
+            placeholder="Type output path..."
             disabled={!backendConnected || !!isJobActive}
             className="flex-1 min-w-0 rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 transition focus:border-emerald-500 focus:outline-none disabled:opacity-50 font-mono"
           />
           <button
             type="button"
-            onClick={() => onOpenBrowser("output")}
+            onClick={() => handlePickNativeFolder(outputFolderRef, onChangeOutputPath)}
             disabled={!backendConnected || !!isJobActive}
-            title="Browse File Explorer"
+            title="Open File Explorer"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-[var(--surface-1)] text-emerald-500 hover:border-emerald-500/60 hover:bg-[var(--surface-2)] disabled:opacity-50 transition cursor-pointer"
           >
             <FolderOpen className="h-4 w-4" />
