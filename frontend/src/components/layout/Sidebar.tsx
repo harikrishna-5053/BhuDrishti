@@ -25,6 +25,7 @@ import type { LogLevel } from "@/lib/types";
 import { useGeoTIFFStore } from "@/stores/geotiff-store";
 import type { ColorRampPreset } from "@/lib/ndvi";
 import { toast } from "sonner";
+import { DaywiseCalendarPicker } from "@/components/ui/DaywiseCalendarPicker";
 
 const LAYER_META: {
   key: keyof LayerState;
@@ -221,6 +222,10 @@ export default function Sidebar({
                 compositePeriod={compositePeriod}
                 setCompositePeriod={setCompositePeriod}
                 backendConnected={backendConnected}
+                activeJobId={activeJobId}
+                activeJobStatus={activeJobStatus}
+                jobSummary={jobSummary}
+                onCancelJob={onCancelJob}
                 onVisualizeExisting={() =>
                   onVisualizeExisting &&
                   onVisualizeExisting({
@@ -234,6 +239,11 @@ export default function Sidebar({
                   })
                 }
                 onOpenGeoTIFFUpload={onOpenGeoTIFFUpload}
+              />
+              <VisualizePipelineSection
+                processingType={processingType}
+                activeJobSummary={jobSummary}
+                onPushLog={onPushLog}
               />
             </>
           )}
@@ -484,14 +494,12 @@ function ProcessingWorkflowSection({
           <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             Target Sensing Date
           </label>
-          <input
-            type="date"
+          <DaywiseCalendarPicker
             value={targetDate}
-            min="2023-01-01"
-            max={new Date().toISOString().split("T")[0]}
-            onChange={(e) => setTargetDate(e.target.value)}
+            onChange={(d) => setTargetDate(d)}
             disabled={!backendConnected || !!isJobActive}
-            className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none disabled:opacity-50 cursor-pointer"
+            minDate="2023-01-01"
+            maxDate={new Date().toISOString().split("T")[0]}
           />
         </div>
       ) : (
@@ -696,6 +704,10 @@ function VisualizeWorkflowSection({
   compositePeriod,
   setCompositePeriod,
   backendConnected,
+  activeJobId,
+  activeJobStatus,
+  jobSummary,
+  onCancelJob,
   onVisualizeExisting,
   onOpenGeoTIFFUpload,
 }: {
@@ -714,9 +726,15 @@ function VisualizeWorkflowSection({
   compositePeriod: CompositePeriod;
   setCompositePeriod: (p: CompositePeriod) => void;
   backendConnected: boolean;
+  activeJobId?: string | null;
+  activeJobStatus?: string | null;
+  jobSummary?: any;
+  onCancelJob?: () => void;
   onVisualizeExisting: () => void;
   onOpenGeoTIFFUpload?: () => void;
 }) {
+  const isJobActive = activeJobId && ["QUEUED", "RUNNING", "CANCELLING", "OVERLAYING"].includes(activeJobStatus || "");
+  const isCancelling = activeJobStatus === "CANCELLING";
   const outputFolderRef = useRef<HTMLInputElement>(null);
 
   const handlePickNativeFolder = (targetRef: React.RefObject<HTMLInputElement | null>) => {
@@ -765,7 +783,7 @@ function VisualizeWorkflowSection({
         <select
           value={satellite}
           onChange={(e) => setSatellite(e.target.value)}
-          disabled={!backendConnected}
+          disabled={!backendConnected || !!isJobActive}
           className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground focus:border-emerald-500 focus:outline-none disabled:opacity-50 cursor-pointer"
         >
           <option value="ALL">All Satellite Outputs</option>
@@ -783,7 +801,7 @@ function VisualizeWorkflowSection({
         <div className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--surface-1)] p-1 border border-border">
           <button
             type="button"
-            disabled={!backendConnected}
+            disabled={!backendConnected || !!isJobActive}
             onClick={() => setProcessingType("daywise")}
             className={`rounded py-1 text-center font-bold text-[11px] transition cursor-pointer ${
               processingType === "daywise"
@@ -795,7 +813,7 @@ function VisualizeWorkflowSection({
           </button>
           <button
             type="button"
-            disabled={!backendConnected}
+            disabled={!backendConnected || !!isJobActive}
             onClick={() => setProcessingType("composite")}
             className={`rounded py-1 text-center font-bold text-[11px] transition cursor-pointer ${
               processingType === "composite"
@@ -814,12 +832,12 @@ function VisualizeWorkflowSection({
           <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             Sensing Date
           </label>
-          <input
-            type="date"
+          <DaywiseCalendarPicker
             value={targetDate}
-            onChange={(e) => setTargetDate(e.target.value)}
-            disabled={!backendConnected}
-            className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground focus:border-emerald-500 focus:outline-none disabled:opacity-50 cursor-pointer"
+            onChange={(d) => setTargetDate(d)}
+            disabled={!backendConnected || !!isJobActive}
+            minDate="2023-01-01"
+            maxDate={new Date().toISOString().split("T")[0]}
           />
         </div>
       ) : (
@@ -832,10 +850,10 @@ function VisualizeWorkflowSection({
               <select
                 value={year}
                 onChange={(e) => setYear(parseInt(e.target.value))}
-                disabled={!backendConnected}
+                disabled={!backendConnected || !!isJobActive}
                 className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2 py-1 text-xs text-foreground focus:border-emerald-500 focus:outline-none disabled:opacity-50 cursor-pointer"
               >
-                {[2026, 2025, 2024, 2023, 2022, 2021, 2020].map((y) => (
+                {Array.from({ length: new Date().getFullYear() - 2023 + 1 }, (_, i) => new Date().getFullYear() - i).map((y) => (
                   <option key={y} value={y}>
                     {y}
                   </option>
@@ -849,7 +867,7 @@ function VisualizeWorkflowSection({
               <select
                 value={month}
                 onChange={(e) => setMonth(parseInt(e.target.value))}
-                disabled={!backendConnected}
+                disabled={!backendConnected || !!isJobActive}
                 className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2 py-1 text-xs text-foreground focus:border-emerald-500 focus:outline-none disabled:opacity-50 cursor-pointer"
               >
                 {[
@@ -865,11 +883,15 @@ function VisualizeWorkflowSection({
                   "October",
                   "November",
                   "December",
-                ].map((m, idx) => (
-                  <option key={m} value={idx + 1}>
-                    {m}
-                  </option>
-                ))}
+                ].map((m, idx) => {
+                  const mNum = idx + 1;
+                  const isFutureMonth = year === new Date().getFullYear() && mNum > (new Date().getMonth() + 1);
+                  return (
+                    <option key={m} value={mNum} disabled={isFutureMonth}>
+                      {m} {isFutureMonth ? "(Future)" : ""}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -879,7 +901,7 @@ function VisualizeWorkflowSection({
             month={month}
             selectedPeriod={compositePeriod}
             onSelectPeriod={setCompositePeriod}
-            disabled={!backendConnected}
+            disabled={!backendConnected || !!isJobActive}
           />
         </div>
       )}
@@ -895,13 +917,13 @@ function VisualizeWorkflowSection({
             value={outputRelPath}
             onChange={(e) => onChangeOutputPath(e.target.value)}
             placeholder="Output folder path..."
-            disabled={!backendConnected}
+            disabled={!backendConnected || !!isJobActive}
             className="flex-1 min-w-0 rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 transition focus:border-emerald-500 focus:outline-none disabled:opacity-50 font-mono"
           />
           <button
             type="button"
             onClick={() => handlePickNativeFolder(outputFolderRef)}
-            disabled={!backendConnected}
+            disabled={!backendConnected || !!isJobActive}
             title="Open OS File Explorer"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-[var(--surface-1)] text-emerald-500 hover:border-emerald-500/60 hover:bg-[var(--surface-2)] disabled:opacity-50 transition cursor-pointer"
           >
@@ -910,15 +932,69 @@ function VisualizeWorkflowSection({
         </div>
       </div>
 
-      {/* Visualize Action Button */}
-      <button
-        onClick={onVisualizeExisting}
-        disabled={!backendConnected}
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-md hover:bg-emerald-700 transition cursor-pointer font-mono disabled:opacity-50"
-      >
-        <Eye className="h-4 w-4" />
-        <span>Visualize & Analyze Output</span>
-      </button>
+      {/* Active Job Real Progress Panel for Visualize Tab */}
+      {isJobActive ? (
+        <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-2.5 space-y-2 font-mono text-xs">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 font-bold text-emerald-500 text-[11px]">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {isCancelling ? "CANCELLING..." : activeJobStatus}
+            </span>
+            {onCancelJob && (
+              <button
+                onClick={onCancelJob}
+                disabled={isCancelling}
+                className="rounded bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-500 hover:bg-red-500/30 transition disabled:opacity-50 cursor-pointer"
+              >
+                {isCancelling ? "Cancelling..." : "Cancel"}
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-1 text-[11px]">
+            <div className="flex justify-between text-foreground">
+              <span className="truncate text-[10px] font-semibold">{jobSummary?.current_stage || "inspecting_output"}</span>
+              {jobSummary?.progress_percent !== null && jobSummary?.progress_percent !== undefined ? (
+                <span className="font-bold text-emerald-500">{jobSummary.progress_percent}%</span>
+              ) : (
+                <span className="text-emerald-500 text-[10px] font-bold">98% Overlay</span>
+              )}
+            </div>
+
+            {/* Progress Bar */}
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-2)]">
+              {jobSummary?.progress_percent !== null && jobSummary?.progress_percent !== undefined ? (
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-300"
+                  style={{ width: `${jobSummary.progress_percent}%` }}
+                />
+              ) : (
+                <div className="h-full w-full bg-emerald-500/60 animate-pulse" />
+              )}
+            </div>
+
+            {jobSummary?.current_zip && (
+              <div className="truncate text-[10px] text-muted-foreground">
+                Output: <span className="text-foreground">{jobSummary.current_zip}</span>
+              </div>
+            )}
+            {jobSummary?.message && (
+              <div className="truncate text-[10px] text-muted-foreground font-medium">
+                {jobSummary.message}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={onVisualizeExisting}
+          disabled={!backendConnected}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-md hover:bg-emerald-700 transition cursor-pointer font-mono disabled:opacity-50"
+        >
+          <Eye className="h-4 w-4" />
+          <span>Visualize & Analyze Output</span>
+        </button>
+      )}
 
       {/* Direct Local Upload Option */}
       <div className="pt-1">
@@ -933,6 +1009,97 @@ function VisualizeWorkflowSection({
           <span className="font-mono text-[9px]">Browse...</span>
         </button>
       </div>
+    </section>
+  );
+}
+
+/**
+ * VISUALIZE PIPELINE SECTION — PIPELINE STAGES FOR DAYWISE AND COMPOSITE SEPARATELY
+ */
+const VISUALIZE_DAYWISE_PIPELINE = [
+  { id: "locate", label: "Locate Daywise GeoTIFF", icon: FolderOpen, hint: "Match sensing date & satellite" },
+  { id: "validate", label: "Validate GeoTIFF COG", icon: FileImage, hint: "Check EPSG:4326 & Float32 data" },
+  { id: "tile", label: "XYZ Tile Cache Lookup", icon: Layers, hint: "Fetch Mercator tile windows" },
+  { id: "overlay", label: "Map Layer Overlay", icon: Eye, hint: "Render active GeoTIFF on Leaflet" },
+];
+
+const VISUALIZE_COMPOSITE_PIPELINE = [
+  { id: "locate", label: "Locate 10-Day Period Mosaic", icon: FolderOpen, hint: "Match 10-day period mosaic" },
+  { id: "validate", label: "Validate Mosaic Manifest", icon: FileImage, hint: "Check NoData (-9999) & metadata" },
+  { id: "tile", label: "XYZ Tile Cache Lookup", icon: Layers, hint: "Fetch Mercator tile windows" },
+  { id: "overlay", label: "Map Layer Overlay", icon: Eye, hint: "Render active mosaic on Leaflet" },
+];
+
+function VisualizePipelineSection({
+  processingType,
+  activeJobSummary,
+  onPushLog,
+}: {
+  processingType: "daywise" | "composite";
+  activeJobSummary: any;
+  onPushLog: (l: LogLevel, m: string) => void;
+}) {
+  const { raster } = useGeoTIFFStore();
+  const pipeline = processingType === "daywise" ? VISUALIZE_DAYWISE_PIPELINE : VISUALIZE_COMPOSITE_PIPELINE;
+  const currentStage = activeJobSummary?.current_stage || (raster ? "overlay" : "locate");
+
+  return (
+    <section className="glass-panel rounded-xl p-3 bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-2">
+      <SectionHeader
+        icon={Eye}
+        title={processingType === "daywise" ? "Daywise Inspection Stages" : "Composite Inspection Stages"}
+        count={processingType === "daywise" ? "Daywise" : "10-Day Composite"}
+      />
+      <div className="space-y-1.5">
+        {pipeline.map((step, i) => {
+          const Icon = step.icon;
+          const isActiveStage =
+            currentStage.toLowerCase().includes(step.id) ||
+            (step.id === "overlay" && (currentStage === "map_overlay" || currentStage === "overlay" || !!raster));
+
+          return (
+            <div
+              key={step.id}
+              className={`group flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition font-mono ${
+                isActiveStage
+                  ? "border-emerald-500 bg-emerald-500/10 shadow-sm"
+                  : "border-border bg-[var(--surface-0)] hover:border-emerald-500/60 hover:bg-[var(--surface-1)] cursor-pointer"
+              }`}
+            >
+              <div className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-[var(--surface-2)] font-mono text-[10px] font-semibold text-foreground border border-border">
+                {String(i + 1).padStart(2, "0")}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-1 text-xs font-semibold text-foreground">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Icon className={`h-3.5 w-3.5 shrink-0 ${isActiveStage ? "text-emerald-500 animate-pulse" : "text-emerald-500"}`} />
+                    <span className="truncate">{step.label}</span>
+                  </div>
+                </div>
+                <div className="font-mono text-[10px] text-muted-foreground">{step.hint}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Real Live Metrics when Raster is Active */}
+      {raster && (
+        <div className="mt-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2 font-mono text-[10px] space-y-1">
+          <div className="flex items-center justify-between font-bold text-emerald-600 dark:text-emerald-400">
+            <span>ACTIVE RASTER METRICS</span>
+            <span>{raster.crs || "EPSG:4326"}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-muted-foreground">
+            <div>Dimensions: <span className="font-semibold text-foreground">{raster.width} × {raster.height}</span></div>
+            <div>File Size: <span className="font-semibold text-foreground">{(raster.fileSize / (1024 * 1024)).toFixed(1)} MB</span></div>
+            <div>Min NDVI: <span className="font-semibold text-foreground">{raster.statistics.minimum.toFixed(3)}</span></div>
+            <div>Max NDVI: <span className="font-semibold text-foreground">{raster.statistics.maximum.toFixed(3)}</span></div>
+            <div>Mean NDVI: <span className="font-semibold text-foreground">{raster.statistics.mean.toFixed(3)}</span></div>
+            <div>Valid Count: <span className="font-semibold text-foreground">{raster.statistics.validPixelCount.toLocaleString()}</span></div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
