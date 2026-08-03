@@ -33,6 +33,31 @@ export const CompositeCalendar: React.FC<CompositeCalendarProps> = ({
     "21_END": `Days 21 – ${daysInMonth} (End Month)`,
   };
 
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth() + 1; // 1-12
+  const currentDay = today.getDate();
+
+  const isFutureDate = (d: number): boolean => {
+    if (year > currentYear) return true;
+    if (year === currentYear && month > currentMonth) return true;
+    if (year === currentYear && month === currentMonth && d > currentDay) return true;
+    return false;
+  };
+
+  const isPeriodInFuture = (p: CompositePeriod): boolean => {
+    if (year > currentYear) return true;
+    if (year === currentYear && month > currentMonth) return true;
+    if (year === currentYear && month === currentMonth) {
+      if (p === "01_10" && currentDay < 1) return true;
+      if (p === "11_20" && currentDay < 11) return true;
+      if (p === "21_END" && currentDay < 21) return true;
+    }
+    return false;
+  };
+
+  const isYearTooOld = year < 2023;
+
   return (
     <div className="space-y-3 rounded-xl border border-border bg-[var(--surface-1)] p-3 text-xs shadow-inner">
       <div className="flex items-center justify-between border-b border-border/50 pb-2">
@@ -50,6 +75,8 @@ export const CompositeCalendar: React.FC<CompositeCalendarProps> = ({
         {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
           const p = getPeriodForDay(day);
           const isSelected = selectedPeriod === p;
+          const isFuture = isFutureDate(day);
+          const isDisabled = disabled || isYearTooOld || isFuture;
 
           let blockStyle = "bg-sky-500/10 text-sky-600 hover:bg-sky-500/20 border-sky-500/20";
           let activeBlockStyle = "bg-sky-600 text-white font-bold border-sky-600 shadow-md scale-105";
@@ -66,12 +93,18 @@ export const CompositeCalendar: React.FC<CompositeCalendarProps> = ({
             <button
               key={day}
               type="button"
-              disabled={disabled}
+              disabled={isDisabled}
               onClick={() => onSelectPeriod(p)}
               className={`flex h-7 items-center justify-center rounded border font-mono transition-all cursor-pointer ${
-                isSelected ? activeBlockStyle : blockStyle
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
-              title={`Click to select ${periodLabels[p]}`}
+                isSelected && !isDisabled ? activeBlockStyle : blockStyle
+              } disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
+              title={
+                isFuture
+                  ? "Future date (Sentinel-2 data unavailable)"
+                  : isYearTooOld
+                  ? "Data available from 2023 onwards"
+                  : `Click to select ${periodLabels[p]}`
+              }
             >
               {day}
             </button>

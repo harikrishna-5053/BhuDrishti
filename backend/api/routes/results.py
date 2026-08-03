@@ -133,10 +133,24 @@ def visualize_existing_output(req: VisualizeRequest):
 
 @router.get("/{result_id}/download")
 def download_result(result_id: str, path: Optional[str] = None):
-    if not path or not os.path.exists(path):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Raster file path missing.")
+    file_path = None
+    if path and os.path.exists(path):
+        file_path = Path(path).resolve()
+    else:
+        # Fallback to searching active job manager results_map
+        manager = get_job_manager()
+        with manager._lock:
+            for _, job in manager._jobs.items():
+                res_map = job.get("results_map", {})
+                if result_id in res_map:
+                    abs_p = res_map[result_id].get("absolute_path")
+                    if abs_p and os.path.exists(abs_p):
+                        file_path = Path(abs_p).resolve()
+                        break
 
-    file_path = Path(path).resolve()
+    if not file_path or not file_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Raster file path missing or file not found.")
+
     val_ok, val_err = validate_output_tiff(str(file_path))
     if not val_ok:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"File validation failed: {val_err}")

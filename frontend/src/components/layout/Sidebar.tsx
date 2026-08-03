@@ -487,6 +487,8 @@ function ProcessingWorkflowSection({
           <input
             type="date"
             value={targetDate}
+            min="2023-01-01"
+            max={new Date().toISOString().split("T")[0]}
             onChange={(e) => setTargetDate(e.target.value)}
             disabled={!backendConnected || !!isJobActive}
             className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none disabled:opacity-50 cursor-pointer"
@@ -505,7 +507,7 @@ function ProcessingWorkflowSection({
                 disabled={!backendConnected || !!isJobActive}
                 className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2 py-1 text-xs text-foreground focus:border-primary focus:outline-none disabled:opacity-50 cursor-pointer"
               >
-                {[2026, 2025, 2024, 2023, 2022, 2021, 2020].map((y) => (
+                {Array.from({ length: new Date().getFullYear() - 2023 + 1 }, (_, i) => new Date().getFullYear() - i).map((y) => (
                   <option key={y} value={y}>
                     {y}
                   </option>
@@ -535,11 +537,15 @@ function ProcessingWorkflowSection({
                   "October",
                   "November",
                   "December",
-                ].map((m, idx) => (
-                  <option key={m} value={idx + 1}>
-                    {m}
-                  </option>
-                ))}
+                ].map((m, idx) => {
+                  const mNum = idx + 1;
+                  const isFutureMonth = year === new Date().getFullYear() && mNum > (new Date().getMonth() + 1);
+                  return (
+                    <option key={m} value={mNum} disabled={isFutureMonth}>
+                      {m} {isFutureMonth ? "(Future)" : ""}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>

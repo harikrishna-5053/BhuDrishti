@@ -283,10 +283,10 @@ export const api = {
     }),
 
   getJobResults: (jobId: string): Promise<JobResultsResponse> =>
-    request<JobResultsResponse>(`/api/jobs/job/${encodeURIComponent(jobId)}`),
+    request<JobResultsResponse>(`/api/results/job/${encodeURIComponent(jobId)}`),
 
-  getDownloadUrl: (jobId: string, resultId: string): string =>
-    `${API_BASE_URL}/api/results/${encodeURIComponent(resultId)}/download`,
+  getDownloadUrl: (jobId: string, resultId: string, path?: string): string =>
+    `${API_BASE_URL}/api/results/${encodeURIComponent(resultId)}/download${path ? `?path=${encodeURIComponent(path)}` : ""}`,
 
   getAOIAnalytics: (resultIds: string[], geojson: any): Promise<AOIAnalyticsResponse> =>
     request<AOIAnalyticsResponse>("/api/analytics/aoi", {

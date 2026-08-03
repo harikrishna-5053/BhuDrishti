@@ -304,9 +304,23 @@ function Dashboard() {
                       r.file_type === "NDVI_TILE",
                   ) || resList.results[0];
                 await handleOpenResultInViewer(selectedResult);
+              } else if (!autoLoadedJobIdsRef.current.has(activeJobId)) {
+                // Fallback auto-overlay via visualize search
+                autoLoadedJobIdsRef.current.add(activeJobId);
+                await handleVisualizeExisting({
+                  output_relative_path: outputRelPath,
+                  processing_type: "daywise",
+                });
               }
             } catch (rErr) {
               console.error("Failed to fetch job results:", rErr);
+              if (!autoLoadedJobIdsRef.current.has(activeJobId)) {
+                autoLoadedJobIdsRef.current.add(activeJobId);
+                await handleVisualizeExisting({
+                  output_relative_path: outputRelPath,
+                  processing_type: "daywise",
+                });
+              }
             }
           } else if (summary.status === "FAILED") {
             toast.error("Processing failed.", { description: summary.error || summary.message });
