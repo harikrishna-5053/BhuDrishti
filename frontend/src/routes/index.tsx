@@ -420,12 +420,23 @@ function Dashboard() {
       return;
     }
 
+    const mode = options?.processing_type || "daywise";
+    const sat = options?.satellite || "ALL";
+
+    setActiveJobStatus("RUNNING");
+    setJobSummary({
+      current_stage: "locate",
+      message: `Searching output directory for ${mode === "composite" ? "Composite Mosaic" : "Daywise"} raster...`,
+      progress_percent: 25,
+      current_zip: options?.target_date || `${options?.year || ""}_${options?.month || ""}`,
+    });
+
     try {
-      pushLog("INFO", `Searching for existing generated NDVI output (Satellite: ${options?.satellite || "ALL"}, Mode: ${options?.processing_type || "daywise"})...`);
+      pushLog("INFO", `Searching for existing generated NDVI output (Satellite: ${sat}, Mode: ${mode})...`);
       const res = await api.visualizeExistingNDVI({
         output_relative_path: outputRelPath,
-        satellite: options?.satellite || "ALL",
-        processing_type: options?.processing_type || "daywise",
+        satellite: sat,
+        processing_type: mode,
         target_date: options?.target_date || null,
         year: options?.year || null,
         month: options?.month || null,
@@ -433,25 +444,75 @@ function Dashboard() {
       });
 
       if (!res.found || !res.absolute_path) {
-        toast.info("No Generated Output Found", { description: res.message });
+        toast.info("No Output Found", { description: res.message });
         pushLog("WARN", res.message);
+        setActiveJobStatus(null);
+        setJobSummary(null);
         return;
       }
 
-      toast.success("Existing Output Loaded", { description: `Loaded ${res.filename} without re-processing.` });
       pushLog("SUCCESS", `Loaded existing validated NDVI output: ${res.filename}`);
 
-      // Fetch file and overlay on map
-      const downloadRes = await fetch(res.preview_url || `${api.getDownloadUrl("existing", res.result_id || "1")}&path=${encodeURIComponent(res.absolute_path)}`);
-      if (downloadRes.ok) {
-        const blob = await downloadRes.blob();
-        const file = new File([blob], res.filename || "NDVI.tif", { type: "image/tiff" });
-        const parsedData = await readNDVIGeoTIFF(file);
-        setRaster(parsedData);
+      // Stage 2: Validate
+      setJobSummary({
+        current_stage: "validate",
+        message: `Validating COG structure & CRS: ${res.filename}...`,
+        progress_percent: 50,
+        current_zip: res.filename,
+      });
+
+      // Stage 3: Map Overlay
+      setActiveJobStatus("OVERLAYING");
+      setJobSummary({
+        current_stage: "map_overlay",
+        message: `Downloading & overlaying ${res.filename} on map workspace...`,
+        progress_percent: 85,
+        current_zip: res.filename,
+      });
+
+      const downloadUrl = res.preview_url
+        ? res.preview_url
+        : api.getDownloadUrl("existing", res.result_id || "res_1", res.absolute_path);
+
+      pushLog("INFO", `[MAP OVERLAY] Downloading raster "${res.filename}" for map workspace overlay...`);
+      const downloadRes = await fetch(downloadUrl);
+      if (!downloadRes.ok) {
+        throw new Error(`HTTP ${downloadRes.status}: ${downloadRes.statusText}`);
       }
+      const blob = await downloadRes.blob();
+      if (blob.size === 0) {
+        throw new Error("Raster file is empty (0 bytes).");
+      }
+
+      const file = new File([blob], res.filename || "NDVI.tif", {
+        type: blob.type || "image/tiff",
+        lastModified: Date.now(),
+      });
+
+      pushLog("INFO", `[MAP OVERLAY] Parsing GeoTIFF structure: ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB)...`);
+      const candidateRaster = await readNDVIGeoTIFF(file, (level: LogLevel, msg: string) => {
+        pushLog(level, msg);
+      });
+
+      setRaster(candidateRaster, res.result_id || "res_1");
+      useGeoTIFFStore.getState().triggerZoomToRaster();
+
+      setBottomTab("metadata");
+      setBottomPaneExpanded(true);
+
+      pushLog(
+        "SUCCESS",
+        `[MAP OVERLAY] Output loaded & overlayed on map workspace: ${candidateRaster.fileName} (${candidateRaster.width}x${candidateRaster.height}, ${candidateRaster.crs}). Min=${candidateRaster.statistics.minimum.toFixed(3)}, Max=${candidateRaster.statistics.maximum.toFixed(3)}`,
+      );
+
+      toast.success("Output Overlayed Successfully", {
+        description: `${candidateRaster.fileName} is now active on the map workspace.`,
+      });
     } catch (err: any) {
       toast.error("Visualization Failed", { description: err.message });
       pushLog("ERROR", `Failed to visualize output: ${err.message}`);
+    } finally {
+      setActiveJobStatus(null);
     }
   };
 

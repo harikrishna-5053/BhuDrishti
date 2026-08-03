@@ -238,8 +238,8 @@ export default function Sidebar({
                     composite_period: compositePeriod,
                   })
                 }
-                onOpenGeoTIFFUpload={onOpenGeoTIFFUpload}
               />
+              <LocalGeoTIFFSection onOpenGeoTIFFUpload={onOpenGeoTIFFUpload} />
               <VisualizePipelineSection
                 processingType={processingType}
                 activeJobSummary={jobSummary}
@@ -996,19 +996,6 @@ function VisualizeWorkflowSection({
         </button>
       )}
 
-      {/* Direct Local Upload Option */}
-      <div className="pt-1">
-        <button
-          onClick={onOpenGeoTIFFUpload}
-          className="flex w-full items-center justify-between rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-[11px] text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground transition cursor-pointer"
-        >
-          <span className="flex items-center gap-1.5 font-semibold">
-            <FileImage className="h-3.5 w-3.5 text-emerald-500" />
-            <span>Load Local .tif File</span>
-          </span>
-          <span className="font-mono text-[9px]">Browse...</span>
-        </button>
-      </div>
     </section>
   );
 }
