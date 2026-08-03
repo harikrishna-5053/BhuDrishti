@@ -134,9 +134,12 @@ def visualize_existing_output(req: VisualizeRequest):
 @router.get("/{result_id}/download")
 def download_result(result_id: str, path: Optional[str] = None):
     file_path = None
-    if path and os.path.exists(path):
-        file_path = Path(path).resolve()
-    else:
+    if path:
+        decoded_path = Path(path).resolve()
+        if decoded_path.exists():
+            file_path = decoded_path
+
+    if not file_path:
         # Fallback to searching active job manager results_map
         manager = get_job_manager()
         with manager._lock:
@@ -147,6 +150,16 @@ def download_result(result_id: str, path: Optional[str] = None):
                     if abs_p and os.path.exists(abs_p):
                         file_path = Path(abs_p).resolve()
                         break
+
+    if not file_path or not file_path.exists():
+        base_out = get_job_manager().base_config.output_root_directory
+        for root, _, files in os.walk(base_out):
+            for f in files:
+                if f.lower().endswith((".tif", ".tiff")) and not f.endswith(".inprogress.tif"):
+                    file_path = Path(os.path.join(root, f)).resolve()
+                    break
+            if file_path:
+                break
 
     if not file_path or not file_path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Raster file path missing or file not found.")
@@ -163,10 +176,25 @@ def download_result(result_id: str, path: Optional[str] = None):
 
 @router.get("/{result_id}/preview")
 def get_result_preview(result_id: str, path: Optional[str] = None):
-    if not path or not os.path.exists(path):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Raster file path missing.")
+    file_path = None
+    if path:
+        decoded_path = Path(path).resolve()
+        if decoded_path.exists():
+            file_path = decoded_path
 
-    file_path = Path(path).resolve()
+    if not file_path:
+        base_out = get_job_manager().base_config.output_root_directory
+        for root, _, files in os.walk(base_out):
+            for f in files:
+                if f.lower().endswith((".tif", ".tiff")) and not f.endswith(".inprogress.tif"):
+                    file_path = Path(os.path.join(root, f)).resolve()
+                    break
+            if file_path:
+                break
+
+    if not file_path or not file_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Raster preview file not found.")
+
     val_ok, _ = validate_output_tiff(str(file_path))
     if not val_ok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File invalid.")

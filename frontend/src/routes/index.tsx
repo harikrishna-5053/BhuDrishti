@@ -26,7 +26,7 @@ import {
 } from "@/lib/geotiff/calculate-aoi-statistics";
 import DirectoryBrowserModal from "@/components/modals/DirectoryBrowserModal";
 import { api, type ResultItem } from "@/lib/api/client";
-import { MAX_VIEWER_FILE_MB } from "@/lib/api/config";
+import { MAX_VIEWER_FILE_MB, API_BASE_URL } from "@/lib/api/config";
 import { useTheme } from "@/hooks/use-theme";
 import { readNDVIGeoTIFF } from "@/lib/geotiff/read-ndvi-geotiff";
 import { GeoTIFFValidationError } from "@/lib/geotiff/errors";
@@ -470,9 +470,8 @@ function Dashboard() {
         current_zip: res.filename,
       });
 
-      const downloadUrl = res.preview_url
-        ? res.preview_url
-        : api.getDownloadUrl("existing", res.result_id || "res_1", res.absolute_path);
+      const rawUrl = res.preview_url || api.getDownloadUrl("existing", res.result_id || "res_1", res.absolute_path);
+      const downloadUrl = rawUrl.startsWith("http") ? rawUrl : `${API_BASE_URL}${rawUrl}`;
 
       pushLog("INFO", `[MAP OVERLAY] Downloading raster "${res.filename}" for map workspace overlay...`);
       const downloadRes = await fetch(downloadUrl);

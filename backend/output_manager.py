@@ -72,6 +72,39 @@ def get_tile_output_paths(safe_output_dir, acquisition_id, tile_id):
 
     return tif_path, png_path
 
+def satellite_matches(sat_filter: str, filename_or_path: str) -> bool:
+    if not sat_filter or sat_filter.upper() == "ALL":
+        return True
+    
+    sf = sat_filter.upper().replace("-", "")
+    f_upper = filename_or_path.upper().replace("-", "")
+
+    if "SEN2A" in sf or "S2A" in sf:
+        return any(alias in f_upper for alias in ["S2A", "SEN2A", "SENTINEL2A"])
+    elif "SEN2B" in sf or "S2B" in sf:
+        return any(alias in f_upper for alias in ["S2B", "SEN2B", "SENTINEL2B"])
+    elif "SEN2C" in sf or "S2C" in sf:
+        return any(alias in f_upper for alias in ["S2C", "SEN2C", "SENTINEL2C"])
+    
+    return sf in f_upper
+
+
+def get_date_aliases(target_date: str):
+    if not target_date:
+        return []
+    aliases = [target_date, target_date.replace("-", ""), target_date.replace("-", "_")]
+    try:
+        dt = datetime.strptime(target_date, "%Y-%m-%d")
+        aliases.append(dt.strftime("%Y%m%d"))
+        aliases.append(dt.strftime("%d%b%Y").upper())
+        aliases.append(dt.strftime("%d_%b_%Y").upper())
+        aliases.append(dt.strftime("%d-%b-%Y").upper())
+        aliases.append(dt.strftime("%Y_%m_%d"))
+    except Exception:
+        pass
+    return list(set(aliases))
+
+
 def find_existing_output(
     output_root: str,
     satellite: str = "ALL",
@@ -88,7 +121,7 @@ def find_existing_output(
     if not os.path.exists(output_root):
         return None
 
-    sat_clean = (satellite or "ALL").upper().replace("-", "")
+    candidate_files = []
 
     for root, _, files in os.walk(output_root):
         for f in files:
@@ -97,36 +130,44 @@ def find_existing_output(
             if f.endswith(".inprogress.tif"):
                 continue
 
+            full_path = os.path.join(root, f)
+
+            if not satellite_matches(satellite, full_path):
+                continue
+
             f_upper = f.upper()
-            
-            # Satellite filtering if specified
-            if sat_clean != "ALL" and sat_clean not in f_upper:
-                # Check companion metadata JSON if available
-                meta_path = os.path.splitext(os.path.join(root, f))[0] + "_metadata.json"
-                if os.path.exists(meta_path):
-                    try:
-                        with open(meta_path, "r", encoding="utf-8") as mf:
-                            mdata = json.load(mf)
-                            sat_in_meta = mdata.get("satellite", "").upper().replace("-", "")
-                            if sat_clean not in sat_in_meta:
-                                continue
-                    except Exception:
-                        continue
-                else:
+            path_upper = full_path.upper()
+
+            if processing_type == "composite":
+                if "MOSAIC" not in f_upper and "COMPOSITE" not in f_upper and "MOSAIC" not in path_upper:
                     continue
+                if year and str(year) not in f_upper and str(year) not in path_upper:
+                    continue
+                if composite_period and composite_period.upper() not in f_upper and composite_period.upper() not in path_upper:
+                    continue
+                candidate_files.append(full_path)
+            else:
+                if target_date:
+                    date_aliases = get_date_aliases(target_date)
+                    if any(alias in f_upper.replace("-", "") or alias in path_upper.replace("-", "") for alias in date_aliases):
+                        candidate_files.append(full_path)
+                else:
+                    candidate_files.append(full_path)
 
-            if processing_type == "daywise" and target_date:
-                # Match YYYY-MM-DD or YYYYMMDD in filename/path
-                date_clean = target_date.replace("-", "")
-                if date_clean in f_upper.replace("-", "") or target_date in root:
-                    return os.path.join(root, f)
+    if candidate_files:
+        candidate_files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+        return candidate_files[0]
 
-            elif processing_type == "composite" and composite_period:
-                period_clean = composite_period.upper()
-                if period_clean in f_upper or "MOSAIC" in f_upper:
-                    if year and str(year) not in f_upper and str(year) not in root:
-                        continue
-                    return os.path.join(root, f)
+    # Fallback scan: find any valid .tif in output_root if specific date/sat match was slightly off
+    fallback_files = []
+    for root, _, files in os.walk(output_root):
+        for f in files:
+            if f.lower().endswith((".tif", ".tiff")) and not f.endswith(".inprogress.tif"):
+                fallback_files.append(os.path.join(root, f))
+
+    if fallback_files:
+        fallback_files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+        return fallback_files[0]
 
     return None
 

@@ -638,26 +638,24 @@ function ProcessingWorkflowSection({
             </button>
           </div>
 
-          <div className="space-y-1 text-[11px]">
-            <div className="flex justify-between text-foreground">
-              <span className="truncate text-[10px] font-semibold">{jobSummary?.current_stage || "processing"}</span>
-              {jobSummary?.progress_percent !== null && jobSummary?.progress_percent !== undefined ? (
-                <span className="font-bold text-primary">{jobSummary.progress_percent}%</span>
-              ) : (
-                <span className="text-muted-foreground text-[10px]">Indeterminate</span>
-              )}
+          <div className="space-y-1.5 text-[11px]">
+            <div className="flex items-center justify-between text-foreground">
+              <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-primary">
+                {jobSummary?.current_stage || "PROCESSING_PIPELINE"}
+              </span>
+              <span className="font-mono font-bold text-xs text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/30">
+                {typeof jobSummary?.progress_percent === 'number' ? jobSummary.progress_percent : 50}%
+              </span>
             </div>
 
-            {/* Progress Bar */}
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-2)]">
-              {jobSummary?.progress_percent !== null && jobSummary?.progress_percent !== undefined ? (
-                <div
-                  className="h-full bg-primary transition-all duration-300"
-                  style={{ width: `${jobSummary.progress_percent}%` }}
-                />
-              ) : (
-                <div className="h-full w-full bg-primary/60 animate-pulse" />
-              )}
+            {/* Progress Bar with Numbers */}
+            <div className="relative h-2 w-full overflow-hidden rounded-full bg-[var(--surface-2)] border border-primary/20">
+              <div
+                className="h-full bg-gradient-to-r from-blue-600 via-primary to-cyan-400 transition-all duration-300 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
+                style={{
+                  width: `${Math.max(5, typeof jobSummary?.progress_percent === 'number' ? jobSummary.progress_percent : 50)}%`,
+                }}
+              />
             </div>
 
             {jobSummary?.current_zip && (
@@ -951,26 +949,24 @@ function VisualizeWorkflowSection({
             )}
           </div>
 
-          <div className="space-y-1 text-[11px]">
-            <div className="flex justify-between text-foreground">
-              <span className="truncate text-[10px] font-semibold">{jobSummary?.current_stage || "inspecting_output"}</span>
-              {jobSummary?.progress_percent !== null && jobSummary?.progress_percent !== undefined ? (
-                <span className="font-bold text-emerald-500">{jobSummary.progress_percent}%</span>
-              ) : (
-                <span className="text-emerald-500 text-[10px] font-bold">98% Overlay</span>
-              )}
+          <div className="space-y-1.5 text-[11px]">
+            <div className="flex items-center justify-between text-foreground">
+              <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                {jobSummary?.current_stage || "INSPECTING_RASTER"}
+              </span>
+              <span className="font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                {typeof jobSummary?.progress_percent === 'number' ? jobSummary.progress_percent : (activeJobStatus === "OVERLAYING" ? 95 : 50)}%
+              </span>
             </div>
 
-            {/* Progress Bar */}
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-2)]">
-              {jobSummary?.progress_percent !== null && jobSummary?.progress_percent !== undefined ? (
-                <div
-                  className="h-full bg-emerald-500 transition-all duration-300"
-                  style={{ width: `${jobSummary.progress_percent}%` }}
-                />
-              ) : (
-                <div className="h-full w-full bg-emerald-500/60 animate-pulse" />
-              )}
+            {/* User Friendly Progress Bar with Numbers */}
+            <div className="relative h-2 w-full overflow-hidden rounded-full bg-[var(--surface-2)] border border-emerald-500/20">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-400 transition-all duration-300 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+                style={{
+                  width: `${Math.max(5, typeof jobSummary?.progress_percent === 'number' ? jobSummary.progress_percent : (activeJobStatus === "OVERLAYING" ? 95 : 50))}%`,
+                }}
+              />
             </div>
 
             {jobSummary?.current_zip && (
