@@ -33,8 +33,68 @@ class CreateDirectoryRequest(BaseModel):
 class CreateJobRequest(BaseModel):
     input_relative_path: str = ""
     output_relative_path: str = ""
+    satellite: Optional[str] = "ALL"          # "ALL", "SEN-2A", "SEN-2B", "SEN-2C"
+    processing_type: Optional[str] = "daywise" # "daywise" or "composite"
+    target_date: Optional[str] = None          # YYYY-MM-DD for daywise
+    year: Optional[int] = None
+    month: Optional[int] = None
+    composite_period: Optional[str] = None     # "01_10", "11_20", "21_END"
     create_periodic_mosaic: bool = False
     create_mosaic: Optional[bool] = None
+
+class VisualizeRequest(BaseModel):
+    output_relative_path: str = ""
+    satellite: Optional[str] = "ALL"
+    processing_type: str = "daywise"           # "daywise" or "composite"
+    target_date: Optional[str] = None          # YYYY-MM-DD for daywise
+    year: Optional[int] = None
+    month: Optional[int] = None
+    composite_period: Optional[str] = None     # "01_10", "11_20", "21_END"
+
+class VisualizeResponse(BaseModel):
+    found: bool
+    result_id: Optional[str] = None
+    filename: Optional[str] = None
+    relative_path: Optional[str] = None
+    absolute_path: Optional[str] = None
+    size_bytes: Optional[int] = None
+    category: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    preview_url: Optional[str] = None
+    tile_url_template: Optional[str] = None
+    message: str = ""
+
+class AOITimeSeriesItem(BaseModel):
+    result_id: str
+    filename: str
+    date: str
+    satellite: str
+    processing_type: str
+    valid_count: int
+    nodata_count: int
+    min_ndvi: float
+    max_ndvi: float
+    mean_ndvi: float
+    median_ndvi: float
+    std_dev: float
+    status: str = "success"
+    message: str = ""
+
+class AOITimeSeriesRequest(BaseModel):
+    output_relative_path: str = ""
+    satellite: Optional[str] = "ALL"
+    processing_type: Optional[str] = "ALL"      # "ALL", "daywise", "composite"
+    start_date: Optional[str] = None            # YYYY-MM-DD
+    end_date: Optional[str] = None              # YYYY-MM-DD
+    geojson: Dict[str, Any]
+
+class AOITimeSeriesResponse(BaseModel):
+    total_found: int
+    analyzed_count: int
+    failed_count: int
+    series: List[AOITimeSeriesItem]
+    warnings: List[str] = []
+
 
 class JobSummary(BaseModel):
     job_id: str

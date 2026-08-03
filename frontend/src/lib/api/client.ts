@@ -146,6 +146,63 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export interface VisualizeRequest {
+  output_relative_path?: string;
+  satellite?: string;
+  processing_type: string;
+  target_date?: string | null;
+  year?: number | null;
+  month?: number | null;
+  composite_period?: string | null;
+}
+
+export interface VisualizeResponse {
+  found: boolean;
+  result_id?: string;
+  filename?: string;
+  relative_path?: string;
+  absolute_path?: string;
+  size_bytes?: number;
+  category?: string;
+  metadata?: any;
+  preview_url?: string;
+  tile_url_template?: string;
+  message: string;
+}
+
+export interface AOITimeSeriesItem {
+  result_id: string;
+  filename: string;
+  date: string;
+  satellite: string;
+  processing_type: string;
+  valid_count: number;
+  nodata_count: number;
+  min_ndvi: number;
+  max_ndvi: number;
+  mean_ndvi: number;
+  median_ndvi: number;
+  std_dev: number;
+  status: string;
+}
+
+export interface AOITimeSeriesRequest {
+  output_relative_path?: string;
+  satellite?: string;
+  processing_type?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  geojson: any;
+}
+
+export interface AOITimeSeriesResponse {
+  total_found: number;
+  analyzed_count: number;
+  failed_count: number;
+  series: AOITimeSeriesItem[];
+  warnings: string[];
+}
+
 export const api = {
   getHealth: async (): Promise<HealthResponse> => {
     const controller = new AbortController();
@@ -177,15 +234,39 @@ export const api = {
       }),
     }),
 
-  submitJob: (inputRelativePath: string, outputRelativePath: string, createPeriodicMosaic: boolean = false): Promise<{ job_id: string; status: string }> =>
+  submitJob: (
+    inputRelativePath: string,
+    outputRelativePath: string,
+    options?: {
+      satellite?: string;
+      processing_type?: string;
+      target_date?: string | null;
+      year?: number | null;
+      month?: number | null;
+      composite_period?: string | null;
+      createPeriodicMosaic?: boolean;
+    }
+  ): Promise<{ job_id: string; status: string }> =>
     request<{ job_id: string; status: string }>("/api/jobs", {
       method: "POST",
       body: JSON.stringify({
         input_relative_path: inputRelativePath,
         output_relative_path: outputRelativePath,
-        create_periodic_mosaic: createPeriodicMosaic,
-        create_mosaic: createPeriodicMosaic,
+        satellite: options?.satellite || "ALL",
+        processing_type: options?.processing_type || "daywise",
+        target_date: options?.target_date || null,
+        year: options?.year || null,
+        month: options?.month || null,
+        composite_period: options?.composite_period || null,
+        create_periodic_mosaic: options?.createPeriodicMosaic || false,
+        create_mosaic: options?.createPeriodicMosaic || false,
       }),
+    }),
+
+  visualizeExistingNDVI: (req: VisualizeRequest): Promise<VisualizeResponse> =>
+    request<VisualizeResponse>("/api/results/visualize", {
+      method: "POST",
+      body: JSON.stringify(req),
     }),
 
   getJobStatus: (jobId: string): Promise<JobSummary> =>
@@ -202,10 +283,10 @@ export const api = {
     }),
 
   getJobResults: (jobId: string): Promise<JobResultsResponse> =>
-    request<JobResultsResponse>(`/api/jobs/${encodeURIComponent(jobId)}/results`),
+    request<JobResultsResponse>(`/api/jobs/job/${encodeURIComponent(jobId)}`),
 
   getDownloadUrl: (jobId: string, resultId: string): string =>
-    `${API_BASE_URL}/api/jobs/${encodeURIComponent(jobId)}/results/${encodeURIComponent(resultId)}/download`,
+    `${API_BASE_URL}/api/results/${encodeURIComponent(resultId)}/download`,
 
   getAOIAnalytics: (resultIds: string[], geojson: any): Promise<AOIAnalyticsResponse> =>
     request<AOIAnalyticsResponse>("/api/analytics/aoi", {
@@ -215,4 +296,11 @@ export const api = {
         geojson: geojson,
       }),
     }),
+
+  fetchAOITimeSeries: (req: AOITimeSeriesRequest): Promise<AOITimeSeriesResponse> =>
+    request<AOITimeSeriesResponse>("/api/analytics/aoi-timeseries", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
 };
+

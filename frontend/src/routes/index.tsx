@@ -104,6 +104,7 @@ function Dashboard() {
   const [gaugeResultName, setGaugeResultName] = useState("");
   const [aoiModalOpen, setAoiModalOpen] = useState(false);
   const [aoiStatsResult, setAoiStatsResult] = useState<AOIStatsResult | null>(null);
+  const [currentGeoJSON, setCurrentGeoJSON] = useState<any>(null);
   const [isAOIAnalyzing, setIsAOIAnalyzing] = useState(false);
   const [aoiProgress, setAoiProgress] = useState(0);
   const aoiAbortRef = useRef<AbortController | null>(null);
@@ -366,21 +367,24 @@ function Dashboard() {
     setBrowserModalOpen(true);
   };
 
-  const handleGenerateNDVI = async () => {
+  const handleGenerateNDVI = async (options?: any) => {
     if (!backendConnected) {
       toast.info("NDVI generation backend is not connected yet. You can currently load and analyse local GeoTIFF files.");
       pushLog("INFO", "NDVI generation backend is not connected yet. You can currently load and analyse local GeoTIFF files.");
       return;
     }
 
-    if (!inputRelPath && inputRelPath !== "") {
-      handleOpenBrowser("input");
-      return;
-    }
-
     try {
-      pushLog("INFO", `Submitting pipeline job (Input: /${inputRelPath || "root"}, Output: /${outputRelPath || "root"})...`);
-      const res = await api.submitJob(inputRelPath, outputRelPath, false);
+      pushLog("INFO", `Submitting pipeline job (Satellite: ${options?.satellite || "ALL"}, Mode: ${options?.processing_type || "daywise"}, Input: /${inputRelPath || "root"}, Output: /${outputRelPath || "root"})...`);
+      const res = await api.submitJob(inputRelPath, outputRelPath, {
+        satellite: options?.satellite || "ALL",
+        processing_type: options?.processing_type || "daywise",
+        target_date: options?.target_date || null,
+        year: options?.year || null,
+        month: options?.month || null,
+        composite_period: options?.composite_period || null,
+        createPeriodicMosaic: options?.processing_type === "composite",
+      });
       lastSeqRef.current = 0;
       setActiveJobId(res.job_id);
       setActiveJobStatus(res.status);
@@ -393,6 +397,47 @@ function Dashboard() {
     } catch (err: any) {
       toast.error("Job Submission Failed", { description: err.message });
       pushLog("ERROR", `Failed to submit job: ${err.message}`);
+    }
+  };
+
+  const handleVisualizeExisting = async (options?: any) => {
+    if (!backendConnected) {
+      toast.info("Backend is not connected.");
+      return;
+    }
+
+    try {
+      pushLog("INFO", `Searching for existing generated NDVI output (Satellite: ${options?.satellite || "ALL"}, Mode: ${options?.processing_type || "daywise"})...`);
+      const res = await api.visualizeExistingNDVI({
+        output_relative_path: outputRelPath,
+        satellite: options?.satellite || "ALL",
+        processing_type: options?.processing_type || "daywise",
+        target_date: options?.target_date || null,
+        year: options?.year || null,
+        month: options?.month || null,
+        composite_period: options?.composite_period || null,
+      });
+
+      if (!res.found || !res.absolute_path) {
+        toast.info("No Generated Output Found", { description: res.message });
+        pushLog("WARN", res.message);
+        return;
+      }
+
+      toast.success("Existing Output Loaded", { description: `Loaded ${res.filename} without re-processing.` });
+      pushLog("SUCCESS", `Loaded existing validated NDVI output: ${res.filename}`);
+
+      // Fetch file and overlay on map
+      const downloadRes = await fetch(res.preview_url || `${api.getDownloadUrl("existing", res.result_id || "1")}&path=${encodeURIComponent(res.absolute_path)}`);
+      if (downloadRes.ok) {
+        const blob = await downloadRes.blob();
+        const file = new File([blob], res.filename || "NDVI.tif", { type: "image/tiff" });
+        const parsedData = await readNDVIGeoTIFF(file);
+        setRaster(parsedData);
+      }
+    } catch (err: any) {
+      toast.error("Visualization Failed", { description: err.message });
+      pushLog("ERROR", `Failed to visualize output: ${err.message}`);
     }
   };
 
@@ -611,6 +656,7 @@ function Dashboard() {
             ],
           ],
         };
+        setCurrentGeoJSON(geojsonPolygon);
 
         const res = await api.getAOIAnalytics([activeResultId], geojsonPolygon);
         const item = res.series && res.series[0];
@@ -760,6 +806,7 @@ function Dashboard() {
             jobSummary={jobSummary}
             onOpenBrowser={handleOpenBrowser}
             onGenerateNDVI={handleGenerateNDVI}
+            onVisualizeExisting={handleVisualizeExisting}
             onCancelJob={handleCancelJob}
           />
         }
@@ -867,6 +914,8 @@ function Dashboard() {
         onClose={() => setAoiModalOpen(false)}
         stats={aoiStatsResult}
         rasterName={raster?.fileName}
+        geojson={currentGeoJSON}
+        outputRelPath={outputRelPath}
       />
       <CartographicExportModal
         open={cartographicModalOpen}

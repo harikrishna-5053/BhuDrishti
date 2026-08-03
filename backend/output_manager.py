@@ -72,4 +72,63 @@ def get_tile_output_paths(safe_output_dir, acquisition_id, tile_id):
 
     return tif_path, png_path
 
+def find_existing_output(
+    output_root: str,
+    satellite: str = "ALL",
+    processing_type: str = "daywise",
+    target_date: str = None,
+    year: int = None,
+    month: int = None,
+    composite_period: str = None,
+) -> str:
+    """
+    Scans the output directory tree to find an existing valid NDVI GeoTIFF
+    matching the satellite, processing type, and target date or period.
+    """
+    if not os.path.exists(output_root):
+        return None
+
+    sat_clean = (satellite or "ALL").upper().replace("-", "")
+
+    for root, _, files in os.walk(output_root):
+        for f in files:
+            if not f.lower().endswith((".tif", ".tiff")):
+                continue
+            if f.endswith(".inprogress.tif"):
+                continue
+
+            f_upper = f.upper()
+            
+            # Satellite filtering if specified
+            if sat_clean != "ALL" and sat_clean not in f_upper:
+                # Check companion metadata JSON if available
+                meta_path = os.path.splitext(os.path.join(root, f))[0] + "_metadata.json"
+                if os.path.exists(meta_path):
+                    try:
+                        with open(meta_path, "r", encoding="utf-8") as mf:
+                            mdata = json.load(mf)
+                            sat_in_meta = mdata.get("satellite", "").upper().replace("-", "")
+                            if sat_clean not in sat_in_meta:
+                                continue
+                    except Exception:
+                        continue
+                else:
+                    continue
+
+            if processing_type == "daywise" and target_date:
+                # Match YYYY-MM-DD or YYYYMMDD in filename/path
+                date_clean = target_date.replace("-", "")
+                if date_clean in f_upper.replace("-", "") or target_date in root:
+                    return os.path.join(root, f)
+
+            elif processing_type == "composite" and composite_period:
+                period_clean = composite_period.upper()
+                if period_clean in f_upper or "MOSAIC" in f_upper:
+                    if year and str(year) not in f_upper and str(year) not in root:
+                        continue
+                    return os.path.join(root, f)
+
+    return None
+
+
     

@@ -78,6 +78,7 @@ export default function Sidebar({
   onOpenBrowser,
   onGenerateNDVI,
   onCancelJob,
+  onVisualizeExisting,
 }: {
   open: boolean;
   onToggle: () => void;
@@ -96,55 +97,148 @@ export default function Sidebar({
   activeJobStatus?: string | null;
   jobSummary?: any;
   onOpenBrowser: (scope: "input" | "output") => void;
-  onGenerateNDVI: () => void;
+  onGenerateNDVI: (options?: any) => void;
   onCancelJob: () => void;
+  onVisualizeExisting?: (options?: any) => void;
 }) {
+  const [activeWorkflowTab, setActiveWorkflowTab] = useState<"processing" | "visualize">("processing");
+
+  // Shared Selector States
+  const [satellite, setSatellite] = useState<string>("ALL");
+  const [processingType, setProcessingType] = useState<"daywise" | "composite">("daywise");
+  const [targetDate, setTargetDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [year, setYear] = useState<number>(2026);
+  const [month, setMonth] = useState<number>(3);
+  const [compositePeriod, setCompositePeriod] = useState<"01_10" | "11_20" | "21_END">("11_20");
+
   return (
     <aside
       className={`relative flex shrink-0 flex-col border-r border-border bg-[var(--surface-0)] transition-[width] duration-300 ease-out shadow-[0_2px_8px_rgba(0,0,0,0.06)] z-10 ${
-        open ? "w-[340px]" : "w-14"
+        open ? "w-[360px]" : "w-14"
       }`}
     >
       {open ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-          {/* ChatGPT/Gemini Style Expanded Header */}
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <div className="flex items-center gap-2 font-mono">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3.5">
+          {/* Control Panel Header with Workflow Tab Switcher */}
+          <div className="space-y-2 border-b border-border pb-3">
+            <div className="flex items-center justify-between font-mono">
               <span className="text-xs font-bold uppercase tracking-wider text-foreground">Control Panel</span>
-              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary border border-primary/20">
-                Sentinel-2
-              </span>
+              <button
+                onClick={onToggle}
+                title="Close Control Panel"
+                aria-label="Close Control Panel"
+                className="grid h-7 w-7 place-items-center rounded-lg border border-border bg-[var(--surface-1)] text-muted-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition cursor-pointer"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
             </div>
-            <button
-              onClick={onToggle}
-              title="Close Control Panel"
-              aria-label="Close Control Panel"
-              className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-[var(--surface-1)] text-muted-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition cursor-pointer"
-            >
-              <PanelLeftClose className="h-4.5 w-4.5" />
-            </button>
+
+            {/* Top Workflow Tabs: Processing vs Visualize/Analysis */}
+            <div className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--surface-1)] p-1 border border-border">
+              <button
+                type="button"
+                onClick={() => setActiveWorkflowTab("processing")}
+                className={`flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-bold font-mono transition cursor-pointer ${
+                  activeWorkflowTab === "processing"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Play className="h-3.5 w-3.5 fill-current" />
+                <span>Processing</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveWorkflowTab("visualize")}
+                className={`flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-bold font-mono transition cursor-pointer ${
+                  activeWorkflowTab === "visualize"
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Eye className="h-3.5 w-3.5" />
+                <span>Visualize / Analyze</span>
+              </button>
+            </div>
           </div>
-          {/* 1. NDVI GENERATION & BACKEND PATHS SECTION */}
-          <NDVIGenerationSection
-            inputRelPath={inputRelPath}
-            outputRelPath={outputRelPath}
-            onChangeInputPath={onChangeInputPath || (() => {})}
-            onChangeOutputPath={onChangeOutputPath || (() => {})}
-            backendConnected={backendConnected}
-            activeJobId={activeJobId}
-            activeJobStatus={activeJobStatus}
-            jobSummary={jobSummary}
-            onGenerateNDVI={onGenerateNDVI}
-            onCancelJob={onCancelJob}
-          />
 
-          {/* 2. PROCESS STATUS SECTION */}
-          <ProcessingSection activeJobSummary={jobSummary} onPushLog={onPushLog} />
+          {/* TAB 1: PROCESSING WORKFLOW */}
+          {activeWorkflowTab === "processing" && (
+            <>
+              <ProcessingWorkflowSection
+                inputRelPath={inputRelPath}
+                outputRelPath={outputRelPath}
+                onChangeInputPath={onChangeInputPath || (() => {})}
+                onChangeOutputPath={onChangeOutputPath || (() => {})}
+                satellite={satellite}
+                setSatellite={setSatellite}
+                processingType={processingType}
+                setProcessingType={setProcessingType}
+                targetDate={targetDate}
+                setTargetDate={setTargetDate}
+                year={year}
+                setYear={setYear}
+                month={month}
+                setMonth={setMonth}
+                compositePeriod={compositePeriod}
+                setCompositePeriod={setCompositePeriod}
+                backendConnected={backendConnected}
+                activeJobId={activeJobId}
+                activeJobStatus={activeJobStatus}
+                jobSummary={jobSummary}
+                onGenerateNDVI={() =>
+                  onGenerateNDVI({
+                    satellite,
+                    processing_type: processingType,
+                    target_date: targetDate,
+                    year,
+                    month,
+                    composite_period: compositePeriod,
+                  })
+                }
+                onCancelJob={onCancelJob}
+              />
+              <ProcessingSection activeJobSummary={jobSummary} onPushLog={onPushLog} />
+            </>
+          )}
 
-          {/* 3. LOCAL NDVI GEOTIFF SECTION */}
-          <LocalGeoTIFFSection onOpenGeoTIFFUpload={onOpenGeoTIFFUpload} />
+          {/* TAB 2: VISUALIZE / ANALYSIS WORKFLOW */}
+          {activeWorkflowTab === "visualize" && (
+            <>
+              <VisualizeWorkflowSection
+                outputRelPath={outputRelPath}
+                onChangeOutputPath={onChangeOutputPath || (() => {})}
+                satellite={satellite}
+                setSatellite={setSatellite}
+                processingType={processingType}
+                setProcessingType={setProcessingType}
+                targetDate={targetDate}
+                setTargetDate={setTargetDate}
+                year={year}
+                setYear={setYear}
+                month={month}
+                setMonth={setMonth}
+                compositePeriod={compositePeriod}
+                setCompositePeriod={setCompositePeriod}
+                backendConnected={backendConnected}
+                onVisualizeExisting={() =>
+                  onVisualizeExisting &&
+                  onVisualizeExisting({
+                    output_relative_path: outputRelPath,
+                    satellite,
+                    processing_type: processingType,
+                    target_date: targetDate,
+                    year,
+                    month,
+                    composite_period: compositePeriod,
+                  })
+                }
+                onOpenGeoTIFFUpload={onOpenGeoTIFFUpload}
+              />
+            </>
+          )}
 
-          {/* 4. LAYER MANAGER SECTION */}
+          {/* LAYER MANAGER SECTION (SHARED ACROSS BOTH TABS) */}
           <LayerManagerSection
             layers={layers}
             setLayers={setLayers}
@@ -154,7 +248,6 @@ export default function Sidebar({
         </div>
       ) : (
         <div className="flex flex-1 flex-col items-center gap-3 pt-3">
-          {/* ChatGPT / Gemini style Panel Toggle Symbol (Top of collapsed sidebar) */}
           <button
             onClick={onToggle}
             title="Open Control Panel (Expand Sidebar)"
@@ -163,33 +256,10 @@ export default function Sidebar({
           >
             <PanelLeftOpen className="h-5 w-5" />
           </button>
-
-          {/* Divider line below toggle button */}
           <div className="h-px w-8 bg-border my-0.5" />
-
-          {/* Control Panel Shortcut Icons */}
           {[
-            {
-              icon: FolderKanban,
-              label: "NDVI Generation",
-              onClick: () => {
-                onToggle();
-                onOpenBrowser("input");
-              },
-            },
-            {
-              icon: Play,
-              label: "Process Status",
-              onClick: onToggle,
-            },
-            {
-              icon: FileImage,
-              label: "Local NDVI GeoTIFF",
-              onClick: () => {
-                onToggle();
-                if (onOpenGeoTIFFUpload) onOpenGeoTIFFUpload();
-              },
-            },
+            { icon: FolderKanban, label: "NDVI Generation", onClick: onToggle },
+            { icon: Eye, label: "Visualize / Analyze", onClick: onToggle },
             { icon: Layers, label: "Layer Manager", onClick: onToggle },
           ].map((item, i) => {
             const Icon = item.icon;
@@ -236,14 +306,28 @@ function SectionHeader({
   );
 }
 
+import { CompositeCalendar, type CompositePeriod } from "@/components/ui/CompositeCalendar";
+
 /**
- * Section 1: NDVI GENERATION & BACKEND PATHS
+ * TAB 1: PROCESSING WORKFLOW SECTION
  */
-function NDVIGenerationSection({
+function ProcessingWorkflowSection({
   inputRelPath,
   outputRelPath,
   onChangeInputPath,
   onChangeOutputPath,
+  satellite,
+  setSatellite,
+  processingType,
+  setProcessingType,
+  targetDate,
+  setTargetDate,
+  year,
+  setYear,
+  month,
+  setMonth,
+  compositePeriod,
+  setCompositePeriod,
   backendConnected,
   activeJobId,
   activeJobStatus,
@@ -255,6 +339,18 @@ function NDVIGenerationSection({
   outputRelPath: string;
   onChangeInputPath: (path: string) => void;
   onChangeOutputPath: (path: string) => void;
+  satellite: string;
+  setSatellite: (s: string) => void;
+  processingType: "daywise" | "composite";
+  setProcessingType: (t: "daywise" | "composite") => void;
+  targetDate: string;
+  setTargetDate: (d: string) => void;
+  year: number;
+  setYear: (y: number) => void;
+  month: number;
+  setMonth: (m: number) => void;
+  compositePeriod: CompositePeriod;
+  setCompositePeriod: (p: CompositePeriod) => void;
   backendConnected: boolean;
   activeJobId: string | null;
   activeJobStatus: string | null;
@@ -276,8 +372,8 @@ function NDVIGenerationSection({
   };
 
   return (
-    <section className="glass-panel rounded-xl p-3 bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-2.5">
-      <SectionHeader icon={FolderKanban} title="NDVI Pipeline Paths" />
+    <section className="glass-panel rounded-xl p-3 bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-3 font-mono text-xs">
+      <SectionHeader icon={FolderKanban} title="Processing Parameters" />
 
       {/* Hidden Native File Explorer Inputs */}
       <input
@@ -295,22 +391,13 @@ function NDVIGenerationSection({
             if ("path" in first && typeof (first as any).path === "string" && (first as any).path) {
               const fullFilePath = (first as any).path;
               const lastSlash = Math.max(fullFilePath.lastIndexOf("/"), fullFilePath.lastIndexOf("\\"));
-              if (lastSlash > 0) {
-                selectedPath = fullFilePath.substring(0, lastSlash);
-              }
+              if (lastSlash > 0) selectedPath = fullFilePath.substring(0, lastSlash);
             }
             if (!selectedPath && first.webkitRelativePath) {
               const parts = first.webkitRelativePath.split("/");
-              if (parts.length > 1) {
-                selectedPath = parts.slice(0, parts.length - 1).join("/");
-              } else {
-                selectedPath = parts[0];
-              }
+              selectedPath = parts.length > 1 ? parts.slice(0, parts.length - 1).join("/") : parts[0];
             }
-            if (!selectedPath) {
-              selectedPath = first.name;
-            }
-            onChangeInputPath(selectedPath);
+            onChangeInputPath(selectedPath || first.name);
           }
         }}
       />
@@ -329,37 +416,156 @@ function NDVIGenerationSection({
             if ("path" in first && typeof (first as any).path === "string" && (first as any).path) {
               const fullFilePath = (first as any).path;
               const lastSlash = Math.max(fullFilePath.lastIndexOf("/"), fullFilePath.lastIndexOf("\\"));
-              if (lastSlash > 0) {
-                selectedPath = fullFilePath.substring(0, lastSlash);
-              }
+              if (lastSlash > 0) selectedPath = fullFilePath.substring(0, lastSlash);
             }
             if (!selectedPath && first.webkitRelativePath) {
               const parts = first.webkitRelativePath.split("/");
-              if (parts.length > 1) {
-                selectedPath = parts.slice(0, parts.length - 1).join("/");
-              } else {
-                selectedPath = parts[0];
-              }
+              selectedPath = parts.length > 1 ? parts.slice(0, parts.length - 1).join("/") : parts[0];
             }
-            if (!selectedPath) {
-              selectedPath = first.name;
-            }
-            onChangeOutputPath(selectedPath);
+            onChangeOutputPath(selectedPath || first.name);
           }
         }}
       />
 
-      {/* Input Path Input Field + Native Folder Button */}
+      {/* Satellite Selection Dropdown */}
       <div className="space-y-1">
-        <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
-          Input Folder (Sentinel-2 ZIPs)
+        <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          Satellite Selection
+        </label>
+        <select
+          value={satellite}
+          onChange={(e) => setSatellite(e.target.value)}
+          disabled={!backendConnected || !!isJobActive}
+          className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none disabled:opacity-50 cursor-pointer"
+        >
+          <option value="ALL">All Sentinel-2 Satellites</option>
+          <option value="SEN-2A">Sentinel-2A (SEN-2A)</option>
+          <option value="SEN-2B">Sentinel-2B (SEN-2B)</option>
+          <option value="SEN-2C">Sentinel-2C (SEN-2C)</option>
+        </select>
+      </div>
+
+      {/* Processing Type Switcher: Daywise vs Composite */}
+      <div className="space-y-1">
+        <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          Processing Mode
+        </label>
+        <div className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--surface-1)] p-1 border border-border">
+          <button
+            type="button"
+            disabled={!backendConnected || !!isJobActive}
+            onClick={() => setProcessingType("daywise")}
+            className={`rounded py-1 text-center font-bold text-[11px] transition cursor-pointer ${
+              processingType === "daywise"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Daywise
+          </button>
+          <button
+            type="button"
+            disabled={!backendConnected || !!isJobActive}
+            onClick={() => setProcessingType("composite")}
+            className={`rounded py-1 text-center font-bold text-[11px] transition cursor-pointer ${
+              processingType === "composite"
+                ? "bg-emerald-600 text-white shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Composite (10-Day)
+          </button>
+        </div>
+      </div>
+
+      {/* Dynamic Date Selection based on Processing Mode */}
+      {processingType === "daywise" ? (
+        <div className="space-y-1">
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Target Sensing Date
+          </label>
+          <input
+            type="date"
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+            disabled={!backendConnected || !!isJobActive}
+            className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none disabled:opacity-50 cursor-pointer"
+          />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Year
+              </label>
+              <select
+                value={year}
+                onChange={(e) => setYear(parseInt(e.target.value))}
+                disabled={!backendConnected || !!isJobActive}
+                className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2 py-1 text-xs text-foreground focus:border-primary focus:outline-none disabled:opacity-50 cursor-pointer"
+              >
+                {[2026, 2025, 2024, 2023, 2022, 2021, 2020].map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Month
+              </label>
+              <select
+                value={month}
+                onChange={(e) => setMonth(parseInt(e.target.value))}
+                disabled={!backendConnected || !!isJobActive}
+                className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2 py-1 text-xs text-foreground focus:border-primary focus:outline-none disabled:opacity-50 cursor-pointer"
+              >
+                {[
+                  "January",
+                  "February",
+                  "March",
+                  "April",
+                  "May",
+                  "June",
+                  "July",
+                  "August",
+                  "September",
+                  "October",
+                  "November",
+                  "December",
+                ].map((m, idx) => (
+                  <option key={m} value={idx + 1}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* 3-Block Composite Period Calendar Selector */}
+          <CompositeCalendar
+            year={year}
+            month={month}
+            selectedPeriod={compositePeriod}
+            onSelectPeriod={setCompositePeriod}
+            disabled={!backendConnected || !!isJobActive}
+          />
+        </div>
+      )}
+
+      {/* Input Path */}
+      <div className="space-y-1">
+        <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          Input Folder (Sentinel-2 Archives)
         </label>
         <div className="flex items-center gap-1.5">
           <input
             type="text"
             value={inputRelPath}
             onChange={(e) => onChangeInputPath(e.target.value)}
-            placeholder="Type input path..."
+            placeholder="Input path..."
             disabled={!backendConnected || !!isJobActive}
             className="flex-1 min-w-0 rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 transition focus:border-primary focus:outline-none disabled:opacity-50 font-mono"
           />
@@ -375,9 +581,9 @@ function NDVIGenerationSection({
         </div>
       </div>
 
-      {/* Output Path Input Field + Native Folder Button */}
+      {/* Output Path */}
       <div className="space-y-1">
-        <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground font-mono">
+        <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           Output Folder (Generated Rasters)
         </label>
         <div className="flex items-center gap-1.5">
@@ -385,7 +591,7 @@ function NDVIGenerationSection({
             type="text"
             value={outputRelPath}
             onChange={(e) => onChangeOutputPath(e.target.value)}
-            placeholder="Type output path..."
+            placeholder="Output path..."
             disabled={!backendConnected || !!isJobActive}
             className="flex-1 min-w-0 rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 transition focus:border-emerald-500 focus:outline-none disabled:opacity-50 font-mono"
           />
@@ -461,6 +667,266 @@ function NDVIGenerationSection({
           <span>Generate NDVI</span>
         </button>
       )}
+    </section>
+  );
+}
+
+/**
+ * TAB 2: VISUALIZE / ANALYSIS WORKFLOW SECTION
+ */
+function VisualizeWorkflowSection({
+  outputRelPath,
+  onChangeOutputPath,
+  satellite,
+  setSatellite,
+  processingType,
+  setProcessingType,
+  targetDate,
+  setTargetDate,
+  year,
+  setYear,
+  month,
+  setMonth,
+  compositePeriod,
+  setCompositePeriod,
+  backendConnected,
+  onVisualizeExisting,
+  onOpenGeoTIFFUpload,
+}: {
+  outputRelPath: string;
+  onChangeOutputPath: (path: string) => void;
+  satellite: string;
+  setSatellite: (s: string) => void;
+  processingType: "daywise" | "composite";
+  setProcessingType: (t: "daywise" | "composite") => void;
+  targetDate: string;
+  setTargetDate: (d: string) => void;
+  year: number;
+  setYear: (y: number) => void;
+  month: number;
+  setMonth: (m: number) => void;
+  compositePeriod: CompositePeriod;
+  setCompositePeriod: (p: CompositePeriod) => void;
+  backendConnected: boolean;
+  onVisualizeExisting: () => void;
+  onOpenGeoTIFFUpload?: () => void;
+}) {
+  const outputFolderRef = useRef<HTMLInputElement>(null);
+
+  const handlePickNativeFolder = (targetRef: React.RefObject<HTMLInputElement | null>) => {
+    if (targetRef.current) {
+      targetRef.current.value = "";
+      targetRef.current.click();
+    }
+  };
+
+  return (
+    <section className="glass-panel rounded-xl p-3 bg-[var(--surface-0)] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-3 font-mono text-xs">
+      <SectionHeader icon={Eye} title="Inspect Generated Rasters" />
+
+      {/* Hidden Native File Explorer Input */}
+      <input
+        type="file"
+        ref={outputFolderRef}
+        // @ts-ignore
+        webkitdirectory=""
+        directory=""
+        className="hidden"
+        onChange={(e) => {
+          const files = e.target.files;
+          if (files && files.length > 0) {
+            const first = files[0];
+            let selectedPath = "";
+            if ("path" in first && typeof (first as any).path === "string" && (first as any).path) {
+              const fullFilePath = (first as any).path;
+              const lastSlash = Math.max(fullFilePath.lastIndexOf("/"), fullFilePath.lastIndexOf("\\"));
+              if (lastSlash > 0) selectedPath = fullFilePath.substring(0, lastSlash);
+            }
+            if (!selectedPath && first.webkitRelativePath) {
+              const parts = first.webkitRelativePath.split("/");
+              selectedPath = parts.length > 1 ? parts.slice(0, parts.length - 1).join("/") : parts[0];
+            }
+            onChangeOutputPath(selectedPath || first.name);
+          }
+        }}
+      />
+
+      {/* Satellite Filter */}
+      <div className="space-y-1">
+        <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          Satellite Filter
+        </label>
+        <select
+          value={satellite}
+          onChange={(e) => setSatellite(e.target.value)}
+          disabled={!backendConnected}
+          className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground focus:border-emerald-500 focus:outline-none disabled:opacity-50 cursor-pointer"
+        >
+          <option value="ALL">All Satellite Outputs</option>
+          <option value="SEN-2A">Sentinel-2A Only</option>
+          <option value="SEN-2B">Sentinel-2B Only</option>
+          <option value="SEN-2C">Sentinel-2C Only</option>
+        </select>
+      </div>
+
+      {/* Processing Type */}
+      <div className="space-y-1">
+        <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          Output Category
+        </label>
+        <div className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--surface-1)] p-1 border border-border">
+          <button
+            type="button"
+            disabled={!backendConnected}
+            onClick={() => setProcessingType("daywise")}
+            className={`rounded py-1 text-center font-bold text-[11px] transition cursor-pointer ${
+              processingType === "daywise"
+                ? "bg-emerald-600 text-white shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Daywise Rasters
+          </button>
+          <button
+            type="button"
+            disabled={!backendConnected}
+            onClick={() => setProcessingType("composite")}
+            className={`rounded py-1 text-center font-bold text-[11px] transition cursor-pointer ${
+              processingType === "composite"
+                ? "bg-emerald-600 text-white shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Composite Mosaics
+          </button>
+        </div>
+      </div>
+
+      {/* Dynamic Date Selector */}
+      {processingType === "daywise" ? (
+        <div className="space-y-1">
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Sensing Date
+          </label>
+          <input
+            type="date"
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+            disabled={!backendConnected}
+            className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground focus:border-emerald-500 focus:outline-none disabled:opacity-50 cursor-pointer"
+          />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Year
+              </label>
+              <select
+                value={year}
+                onChange={(e) => setYear(parseInt(e.target.value))}
+                disabled={!backendConnected}
+                className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2 py-1 text-xs text-foreground focus:border-emerald-500 focus:outline-none disabled:opacity-50 cursor-pointer"
+              >
+                {[2026, 2025, 2024, 2023, 2022, 2021, 2020].map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Month
+              </label>
+              <select
+                value={month}
+                onChange={(e) => setMonth(parseInt(e.target.value))}
+                disabled={!backendConnected}
+                className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2 py-1 text-xs text-foreground focus:border-emerald-500 focus:outline-none disabled:opacity-50 cursor-pointer"
+              >
+                {[
+                  "January",
+                  "February",
+                  "March",
+                  "April",
+                  "May",
+                  "June",
+                  "July",
+                  "August",
+                  "September",
+                  "October",
+                  "November",
+                  "December",
+                ].map((m, idx) => (
+                  <option key={m} value={idx + 1}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <CompositeCalendar
+            year={year}
+            month={month}
+            selectedPeriod={compositePeriod}
+            onSelectPeriod={setCompositePeriod}
+            disabled={!backendConnected}
+          />
+        </div>
+      )}
+
+      {/* Output Directory Path */}
+      <div className="space-y-1">
+        <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          Output Folder Search Path
+        </label>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="text"
+            value={outputRelPath}
+            onChange={(e) => onChangeOutputPath(e.target.value)}
+            placeholder="Output folder path..."
+            disabled={!backendConnected}
+            className="flex-1 min-w-0 rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 transition focus:border-emerald-500 focus:outline-none disabled:opacity-50 font-mono"
+          />
+          <button
+            type="button"
+            onClick={() => handlePickNativeFolder(outputFolderRef)}
+            disabled={!backendConnected}
+            title="Open OS File Explorer"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-[var(--surface-1)] text-emerald-500 hover:border-emerald-500/60 hover:bg-[var(--surface-2)] disabled:opacity-50 transition cursor-pointer"
+          >
+            <FolderOpen className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Visualize Action Button */}
+      <button
+        onClick={onVisualizeExisting}
+        disabled={!backendConnected}
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-md hover:bg-emerald-700 transition cursor-pointer font-mono disabled:opacity-50"
+      >
+        <Eye className="h-4 w-4" />
+        <span>Visualize & Analyze Output</span>
+      </button>
+
+      {/* Direct Local Upload Option */}
+      <div className="pt-1">
+        <button
+          onClick={onOpenGeoTIFFUpload}
+          className="flex w-full items-center justify-between rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-[11px] text-muted-foreground hover:bg-[var(--surface-2)] hover:text-foreground transition cursor-pointer"
+        >
+          <span className="flex items-center gap-1.5 font-semibold">
+            <FileImage className="h-3.5 w-3.5 text-emerald-500" />
+            <span>Load Local .tif File</span>
+          </span>
+          <span className="font-mono text-[9px]">Browse...</span>
+        </button>
+      </div>
     </section>
   );
 }

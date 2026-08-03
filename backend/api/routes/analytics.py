@@ -1,5 +1,6 @@
 import os
 import math
+import hashlib
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
@@ -32,6 +33,9 @@ from api.schemas import (
     AOIStatsValue,
     ChangeDetectionRequest,
     ChangeDetectionResponse,
+    AOITimeSeriesRequest,
+    AOITimeSeriesResponse,
+    AOITimeSeriesItem,
 )
 from mosaic_cpu.cpu_periodic_mosaic import get_date_from_filename
 
@@ -398,3 +402,141 @@ def get_change_detection(req: ChangeDetectionRequest):
     finally:
         ds_early = None
         ds_late = None
+
+
+@router.post("/aoi-timeseries", response_model=AOITimeSeriesResponse)
+def get_aoi_timeseries_analytics(req: AOITimeSeriesRequest):
+    """
+    Computes multi-date AOI time-series statistics across all matching rasters in output directory.
+    Uses windowed Float32 reading for high speed and scientific accuracy.
+    """
+    import rasterio
+    from rasterio.mask import mask
+    from shapely.geometry import shape
+    from utils import get_satellite_name, get_sensing_date
+
+    manager = get_job_manager()
+    base_out = manager.base_config.output_root_directory
+    target_out_dir = (base_out / req.output_relative_path).resolve() if req.output_relative_path else base_out
+
+    if not target_out_dir.exists():
+        return AOITimeSeriesResponse(
+            total_found=0,
+            analyzed_count=0,
+            failed_count=0,
+            series=[],
+            warnings=["Output directory does not exist."]
+        )
+
+    # 1. Discover matching rasters
+    raster_files: List[str] = []
+    sat_req = (req.satellite or "ALL").upper().replace("-", "")
+    type_req = (req.processing_type or "ALL").lower()
+
+    for root, _, files in os.walk(target_out_dir):
+        for f in sorted(files):
+            if not f.lower().endswith((".tif", ".tiff")) or f.endswith(".inprogress.tif"):
+                continue
+            
+            f_upper = f.upper()
+            sat_name = get_satellite_name(f)
+            
+            if sat_req != "ALL" and sat_req not in sat_name.replace("-", "") and sat_req not in f_upper:
+                continue
+            
+            if type_req == "daywise" and "MOSAIC" in f_upper:
+                continue
+            if type_req == "composite" and "MOSAIC" not in f_upper:
+                continue
+
+            raster_files.append(os.path.join(root, f))
+
+    if not raster_files:
+        return AOITimeSeriesResponse(
+            total_found=0,
+            analyzed_count=0,
+            failed_count=0,
+            series=[],
+            warnings=[f"No matching rasters found in output directory for satellite '{req.satellite}'."]
+        )
+
+    # 2. Parse GeoJSON shape
+    try:
+        geom_shape = shape(req.geojson.get("geometry", req.geojson))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid GeoJSON shape: {e}")
+
+    series_items: List[AOITimeSeriesItem] = []
+    warnings: List[str] = []
+    analyzed_count = 0
+    failed_count = 0
+
+    for file_path in raster_files:
+        fn = os.path.basename(file_path)
+        date_str = get_sensing_date(fn)
+        sat_name = get_satellite_name(fn)
+        cat = "composite" if "MOSAIC" in fn.upper() else "daywise"
+
+        # Date range filtering if requested
+        if req.start_date and date_str != "Unknown" and date_str < req.start_date:
+            continue
+        if req.end_date and date_str != "Unknown" and date_str > req.end_date:
+            continue
+
+        res_id = hashlib.md5(file_path.encode()).hexdigest()[:16] if 'hashlib' in globals() else str(hash(file_path))
+
+        try:
+            with rasterio.open(file_path) as src:
+                # Reproject geometry to raster CRS if needed
+                from rasterio.warp import transform_geom
+                if str(src.crs).upper() != "EPSG:4326":
+                    geom_transformed = transform_geom("EPSG:4326", src.crs, geom_shape.__geo_interface__)
+                else:
+                    geom_transformed = geom_shape.__geo_interface__
+
+                out_image, out_transform = mask(src, [geom_transformed], crop=True, nodata=src.nodata or -9999.0)
+                arr = out_image[0].astype(np.float32)
+                nodata_val = src.nodata if src.nodata is not None else -9999.0
+
+                valid_mask = np.isfinite(arr) & (abs(arr - nodata_val) > 1e-4) & (arr >= -1.0) & (arr <= 1.0)
+                valid_cnt = int(np.count_nonzero(valid_mask))
+                nodata_cnt = int(arr.size - valid_cnt)
+
+                if valid_cnt == 0:
+                    warnings.append(f"Raster '{fn}' contains no valid pixels inside AOI.")
+                    failed_count += 1
+                    continue
+
+                valid_vals = arr[valid_mask]
+                series_items.append(AOITimeSeriesItem(
+                    result_id=res_id,
+                    filename=fn,
+                    date=date_str if date_str != "Unknown" else fn,
+                    satellite=sat_name,
+                    processing_type=cat,
+                    valid_count=valid_cnt,
+                    nodata_count=nodata_cnt,
+                    min_ndvi=float(np.min(valid_vals)),
+                    max_ndvi=float(np.max(valid_vals)),
+                    mean_ndvi=float(np.mean(valid_vals)),
+                    median_ndvi=float(np.median(valid_vals)),
+                    std_dev=float(np.std(valid_vals)),
+                    status="success"
+                ))
+                analyzed_count += 1
+
+        except Exception as err:
+            warnings.append(f"Failed analysis on '{fn}': {err}")
+            failed_count += 1
+
+    # Sort chronologically by date
+    series_items.sort(key=lambda x: x.date)
+
+    return AOITimeSeriesResponse(
+        total_found=len(raster_files),
+        analyzed_count=analyzed_count,
+        failed_count=failed_count,
+        series=series_items,
+        warnings=warnings
+    )
+
