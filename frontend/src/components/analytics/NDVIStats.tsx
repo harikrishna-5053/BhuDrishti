@@ -72,9 +72,9 @@ export default function NDVIStats({
             {currentCls && <VegBadge cls={currentCls} />}
           </div>
 
-          {/* Matrix Row / Col detail for GeoTIFF */}
+          {/* Location Row / Col detail for GeoTIFF */}
           <div className="mt-2 text-[10px] text-muted-foreground font-medium">
-            Matrix: Row <span className="text-foreground font-bold">{selectedPixel.row}</span>, Col{" "}
+            Location: Row <span className="text-foreground font-bold">{selectedPixel.row}</span>, Col{" "}
             <span className="text-foreground font-bold">{selectedPixel.col}</span>
           </div>
 

@@ -71,7 +71,7 @@ export default function Histogram({ year = 2026, currentNdvi, histogram }: Histo
             labelFormatter={(val, payload) => {
               if (payload && payload[0] && payload[0].payload) {
                 const item = payload[0].payload;
-                return `NDVI Range: [${Number(item.binStart).toFixed(2)} .. ${Number(item.binEnd).toFixed(2)}]`;
+                return `NDVI Range: [${Number(item.binStart).toFixed(2)} - ${Number(item.binEnd).toFixed(2)}]`;
               }
               return `NDVI ${Number(val).toFixed(2)}`;
             }}
