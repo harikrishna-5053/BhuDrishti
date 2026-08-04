@@ -39,10 +39,19 @@ from api.schemas import (
 )
 from mosaic_cpu.cpu_periodic_mosaic import get_date_from_filename
 
+from result_registry import get_result_registry
+
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 
 def _find_result_file(result_id: str) -> Tuple[Path, Dict[str, Any]]:
+    registry = get_result_registry()
+    rec = registry.get_result(result_id)
+    if rec:
+        p = Path(rec["absolute_path"]).resolve()
+        if p.exists():
+            return p, rec
+
     manager = get_job_manager()
     with manager._lock:
         for job_id, job in manager._jobs.items():
@@ -50,8 +59,7 @@ def _find_result_file(result_id: str) -> Tuple[Path, Dict[str, Any]]:
             if result_id in res_map:
                 res_data = res_map[result_id]
                 abs_path = Path(res_data["absolute_path"]).resolve()
-                out_dir = Path(job["output_directory"]).resolve()
-                if is_contained_in_root(abs_path, out_dir) and abs_path.exists():
+                if abs_path.exists():
                     return abs_path, res_data
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
@@ -73,14 +81,25 @@ def get_point_analytics(req: PointAnalyticsRequest):
             continue
 
         try:
+            proj_wkt = ds.GetProjection()
+            projX, projY = req.lon, req.lat
+            if proj_wkt:
+                try:
+                    import pyproj
+                    raster_crs = pyproj.CRS.from_wkt(proj_wkt)
+                    src_crs = pyproj.CRS.from_epsg(4326)
+                    if src_crs != raster_crs:
+                        transformer = pyproj.Transformer.from_crs(src_crs, raster_crs, always_xy=True)
+                        projX, projY = transformer.transform(req.lon, req.lat)
+                except Exception:
+                    pass
+
             gt = ds.GetGeoTransform()
-            inv_gt = gdal.InvGeoTransform(gt)
-            if inv_gt is None:
+            if not gt or len(gt) < 6 or gt[1] == 0 or gt[5] == 0:
                 continue
 
-            px, py = gdal.ApplyGeoTransform(inv_gt, req.lon, req.lat)
-            col = int(px)
-            row = int(py)
+            col = int((projX - gt[0]) / gt[1])
+            row = int((projY - gt[3]) / gt[5])
 
             if 0 <= col < ds.RasterXSize and 0 <= row < ds.RasterYSize:
                 band = ds.GetRasterBand(1)
@@ -318,6 +337,16 @@ def get_aoi_analytics(req: AOIAnalyticsRequest):
             med_v = float(np.median(valid_pixels))
             std_v = float(np.std(valid_pixels))
 
+            # Class counts & Vegetation Percentage (NDVI >= 0.2 out of valid pixels)
+            water_cnt = int(np.count_nonzero(valid_pixels < 0.0))
+            non_veg_cnt = int(np.count_nonzero((valid_pixels >= 0.0) & (valid_pixels < 0.2)))
+            sparse_cnt = int(np.count_nonzero((valid_pixels >= 0.2) & (valid_pixels < 0.4)))
+            mod_cnt = int(np.count_nonzero((valid_pixels >= 0.4) & (valid_pixels < 0.6)))
+            dense_cnt = int(np.count_nonzero(valid_pixels >= 0.6))
+
+            veg_pixel_cnt = sparse_cnt + mod_cnt + dense_cnt
+            veg_pct = round((veg_pixel_cnt / valid_cnt) * 100.0, 2) if valid_cnt > 0 else 0.0
+
             series.append(AOIStatsValue(
                 result_id=res_id,
                 filename=res_data["filename"],
@@ -336,6 +365,13 @@ def get_aoi_analytics(req: AOIAnalyticsRequest):
                 mean=round(mean_v, 4),
                 median=round(med_v, 4),
                 standard_deviation=round(std_v, 4),
+                vegetation_pixel_count=veg_pixel_cnt,
+                vegetation_percentage=veg_pct,
+                water_count=water_cnt,
+                non_veg_count=non_veg_cnt,
+                sparse_veg_count=sparse_cnt,
+                moderate_veg_count=mod_cnt,
+                dense_veg_count=dense_cnt,
                 raster_crs=raster_crs_str,
                 status="success",
                 message="AOI analysis completed successfully."

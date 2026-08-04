@@ -105,7 +105,7 @@ export default function Sidebar({
   const [activeWorkflowTab, setActiveWorkflowTab] = useState<"processing" | "visualize">("processing");
 
   // Shared Selector States
-  const [satellite, setSatellite] = useState<string>("ALL");
+  const [satellite, setSatellite] = useState<string>("");
   const [processingType, setProcessingType] = useState<"daywise" | "composite">("daywise");
   const [targetDate, setTargetDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [year, setYear] = useState<number>(2026);
@@ -448,7 +448,9 @@ function ProcessingWorkflowSection({
           disabled={!backendConnected || !!isJobActive}
           className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none disabled:opacity-50 cursor-pointer"
         >
-          <option value="ALL">All Sentinel-2 Satellites</option>
+          <option value="" disabled hidden>
+            Select a Satellite
+          </option>
           <option value="SEN-2A">Sentinel-2A (SEN-2A)</option>
           <option value="SEN-2B">Sentinel-2B (SEN-2B)</option>
           <option value="SEN-2C">Sentinel-2C (SEN-2C)</option>
@@ -673,10 +675,11 @@ function ProcessingWorkflowSection({
       ) : (
         <button
           onClick={onGenerateNDVI}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground shadow-md hover:bg-primary/90 transition cursor-pointer font-mono"
+          disabled={!backendConnected}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground shadow-md hover:bg-primary/90 transition cursor-pointer font-mono disabled:opacity-50"
         >
           <Play className="h-3.5 w-3.5 fill-current" />
-          <span>Generate NDVI</span>
+          <span>{processingType === "composite" ? "Create 10-Day Composite" : "Generate NDVI"}</span>
         </button>
       )}
     </section>
@@ -784,10 +787,12 @@ function VisualizeWorkflowSection({
           disabled={!backendConnected || !!isJobActive}
           className="w-full rounded-lg border border-border bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-foreground focus:border-emerald-500 focus:outline-none disabled:opacity-50 cursor-pointer"
         >
-          <option value="ALL">All Satellite Outputs</option>
-          <option value="SEN-2A">Sentinel-2A Only</option>
-          <option value="SEN-2B">Sentinel-2B Only</option>
-          <option value="SEN-2C">Sentinel-2C Only</option>
+          <option value="" disabled hidden>
+            Select a Satellite
+          </option>
+          <option value="SEN-2A">Sentinel-2A (SEN-2A)</option>
+          <option value="SEN-2B">Sentinel-2B (SEN-2B)</option>
+          <option value="SEN-2C">Sentinel-2C (SEN-2C)</option>
         </select>
       </div>
 
@@ -988,7 +993,7 @@ function VisualizeWorkflowSection({
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-md hover:bg-emerald-700 transition cursor-pointer font-mono disabled:opacity-50"
         >
           <Eye className="h-4 w-4" />
-          <span>Visualize & Analyze Output</span>
+          <span>{processingType === "composite" ? "Visualize Composite Mosaic" : "Visualize Daywise Output"}</span>
         </button>
       )}
 

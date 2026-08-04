@@ -7,6 +7,16 @@ class HealthResponse(BaseModel):
     mode: str = "local"
     pipeline_integration: str = "available"
 
+class StructuredErrorResponse(BaseModel):
+    success: bool = False
+    error_code: str = "INTERNAL_ERROR"
+    user_message: str
+    technical_message: str
+    recoverable: bool = True
+    job_id: Optional[str] = None
+    stage: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+
 class RootLocation(BaseModel):
     path: str
     exists: bool
@@ -179,6 +189,13 @@ class AOIStatsValue(BaseModel):
     mean: Optional[float] = None
     median: Optional[float] = None
     standard_deviation: Optional[float] = None
+    vegetation_pixel_count: Optional[int] = None
+    vegetation_percentage: Optional[float] = None
+    water_count: Optional[int] = None
+    non_veg_count: Optional[int] = None
+    sparse_veg_count: Optional[int] = None
+    moderate_veg_count: Optional[int] = None
+    dense_veg_count: Optional[int] = None
     raster_crs: Optional[str] = None
     status: str = "success"
     message: str = ""

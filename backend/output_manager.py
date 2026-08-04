@@ -92,17 +92,58 @@ def satellite_matches(sat_filter: str, filename_or_path: str) -> bool:
 def get_date_aliases(target_date: str):
     if not target_date:
         return []
-    aliases = [target_date, target_date.replace("-", ""), target_date.replace("-", "_")]
-    try:
-        dt = datetime.strptime(target_date, "%Y-%m-%d")
-        aliases.append(dt.strftime("%Y%m%d"))
-        aliases.append(dt.strftime("%d%b%Y").upper())
-        aliases.append(dt.strftime("%d_%b_%Y").upper())
-        aliases.append(dt.strftime("%d-%b-%Y").upper())
-        aliases.append(dt.strftime("%Y_%m_%d"))
-    except Exception:
-        pass
-    return list(set(aliases))
+    
+    clean_target = str(target_date).strip()
+    raw_clean = clean_target.replace("-", "").replace("_", "").replace("/", "").replace(".", "").replace(" ", "").upper()
+    aliases = [clean_target, raw_clean]
+
+    dt = None
+    date_formats = [
+        "%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%Y",
+        "%Y_%m_%d", "%d_%m_%Y", "%Y.%m.%d", "%d.%m.%Y",
+        "%d%b%Y", "%b%d%Y", "%Y%b%d", "%d%B%Y", "%B%d%Y", "%Y%B%d",
+        "%Y%m%d", "%d%m%Y",
+        "%d-%b-%Y", "%d-%B-%Y", "%Y-%b-%d", "%Y-%B-%d",
+        "%d/%b/%Y", "%d/%B/%Y", "%Y/%b/%d", "%Y/%B/%d",
+        "%d_%b_%Y", "%d_%B_%Y", "%Y_%b_%d", "%Y_%B_%d",
+        "%d %b %Y", "%d %B %Y", "%b %d %Y", "%B %d %Y",
+    ]
+    for fmt in date_formats:
+        try:
+            dt = datetime.strptime(clean_target, fmt)
+            break
+        except Exception:
+            continue
+
+    if dt:
+        year_str = dt.strftime("%Y")
+        month_num = dt.strftime("%m")
+        day_str = dt.strftime("%d")
+        month_abbr = dt.strftime("%b").upper()
+        month_full = dt.strftime("%B").upper()
+
+        aliases.extend([
+            f"{year_str}-{month_num}-{day_str}",
+            f"{day_str}-{month_num}-{year_str}",
+            f"{year_str}{month_num}{day_str}",
+            f"{day_str}{month_num}{year_str}",
+            f"{day_str}{month_abbr}{year_str}",
+            f"{month_abbr}{day_str}{year_str}",
+            f"{year_str}{month_abbr}{day_str}",
+            f"{day_str}{month_full}{year_str}",
+            f"{day_str}_{month_abbr}_{year_str}",
+            f"{day_str}-{month_abbr}-{year_str}",
+            f"{year_str}_{month_num}_{day_str}",
+            f"{day_str}_{month_num}_{year_str}",
+        ])
+        
+    final_set = set()
+    for a in aliases:
+        if a:
+            final_set.add(a.upper())
+            final_set.add(a.replace("-", "").replace("_", "").replace("/", "").replace(".", "").replace(" ", "").upper())
+
+    return list(final_set)
 
 
 def find_existing_output(
@@ -137,6 +178,8 @@ def find_existing_output(
 
             f_upper = f.upper()
             path_upper = full_path.upper()
+            f_clean = f_upper.replace("-", "").replace("_", "").replace(".", "").replace("/", "").replace(" ", "")
+            path_clean = path_upper.replace("-", "").replace("_", "").replace(".", "").replace("/", "").replace(" ", "")
 
             if processing_type == "composite":
                 if "MOSAIC" not in f_upper and "COMPOSITE" not in f_upper and "MOSAIC" not in path_upper:
@@ -149,7 +192,18 @@ def find_existing_output(
             else:
                 if target_date:
                     date_aliases = get_date_aliases(target_date)
-                    if any(alias in f_upper.replace("-", "") or alias in path_upper.replace("-", "") for alias in date_aliases):
+                    is_match = False
+                    for alias in date_aliases:
+                        alias_clean = alias.replace("-", "").replace("_", "").replace(".", "").replace("/", "").replace(" ", "")
+                        if (
+                            alias in f_upper
+                            or alias in path_upper
+                            or (alias_clean and alias_clean in f_clean)
+                            or (alias_clean and alias_clean in path_clean)
+                        ):
+                            is_match = True
+                            break
+                    if is_match:
                         candidate_files.append(full_path)
                 else:
                     candidate_files.append(full_path)
@@ -158,12 +212,14 @@ def find_existing_output(
         candidate_files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
         return candidate_files[0]
 
-    # Fallback scan: find any valid .tif in output_root if specific date/sat match was slightly off
+    # Fallback scan: find any valid .tif in output_root matching satellite if date alias search had no candidate
     fallback_files = []
     for root, _, files in os.walk(output_root):
         for f in files:
             if f.lower().endswith((".tif", ".tiff")) and not f.endswith(".inprogress.tif"):
-                fallback_files.append(os.path.join(root, f))
+                full_p = os.path.join(root, f)
+                if satellite_matches(satellite, full_p):
+                    fallback_files.append(full_p)
 
     if fallback_files:
         fallback_files.sort(key=lambda p: os.path.getmtime(p), reverse=True)

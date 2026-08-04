@@ -19,6 +19,7 @@ import { ndviAt, ndviColor, classify } from "@/lib/ndvi";
 import NDVIGeoTIFFLayer from "./NDVIGeoTIFFLayer";
 import GeoJSONBoundaryLayer from "./GeoJSONBoundaryLayer";
 import { useGeoTIFFStore } from "@/stores/geotiff-store";
+import { API_BASE_URL } from "@/lib/api/config";
 import {
   distanceMeters,
   calculatePathDistanceMeters,
@@ -93,7 +94,7 @@ function ClickHandler({
   aoiActive?: boolean;
   onAOIClick?: (lat: number, lng: number) => void;
 }) {
-  const { raster, setSelectedPixel } = useGeoTIFFStore();
+  const { raster, activeResultId, setSelectedPixel } = useGeoTIFFStore();
 
   useMapEvents({
     click: (e) => {
@@ -106,6 +107,47 @@ function ClickHandler({
 
       if (aoiActive && onAOIClick) {
         onAOIClick(lat, lng);
+        return;
+      }
+
+      // Handle server-side active result ID point inspection via backend GDAL query
+      if (activeResultId && (!raster || !raster.values || raster.values.length === 0)) {
+        fetch(`${API_BASE_URL}/api/analytics/point`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ result_ids: [activeResultId], lat, lon: lng }),
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data && data.series && data.series.length > 0) {
+              const pt = data.series[0];
+              const val = pt.ndvi;
+              const isNoData = pt.nodata || !pt.valid;
+              if (isNoData) {
+                setSelectedPixel(null);
+                if (onOutsideClick) onOutsideClick();
+                toast.info("Selected location contains no-data in the active raster.");
+              } else {
+                setSelectedPixel({
+                  lat,
+                  lng,
+                  row: 0,
+                  col: 0,
+                  value: Number(val.toFixed(3)),
+                  vegClass: classify(val),
+                  isNoData: false,
+                });
+                onClick(lat, lng);
+              }
+            } else {
+              setSelectedPixel(null);
+              if (onOutsideClick) onOutsideClick();
+              toast.info("Click inside the active raster boundary to inspect pixel values.");
+            }
+          })
+          .catch((err) => {
+            console.error("Point analytics error:", err);
+          });
         return;
       }
 
@@ -329,6 +371,38 @@ function RasterSwipeClipping({
   return null;
 }
 
+function ResultBoundsFitter({ activeResultId }: { activeResultId: string | null }) {
+  const map = useMap();
+  const prevIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!activeResultId || activeResultId === prevIdRef.current) return;
+    prevIdRef.current = activeResultId;
+
+    let isMounted = true;
+    fetch(`${API_BASE_URL}/api/results/${activeResultId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isMounted || !data) return;
+        const b = data.bounds;
+        if (b && typeof b.min_lat === "number" && typeof b.min_lon === "number") {
+          const leafletBounds: L.LatLngBoundsLiteral = [
+            [b.min_lat, b.min_lon],
+            [b.max_lat, b.max_lon],
+          ];
+          map.fitBounds(leafletBounds, { padding: [40, 40], maxZoom: 13, animate: true });
+        }
+      })
+      .catch((err) => console.error("Failed to fetch result bounds for map fit:", err));
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeResultId, map]);
+
+  return null;
+}
+
 export default function GISMap({
   layers,
   year,
@@ -386,7 +460,7 @@ export default function GISMap({
   const [swipePos, setSwipePos] = useState(50);
   const isDraggingSwipe = useRef(false);
 
-  const { raster, opacity: geoOpacity, visible: geoVisible } = useGeoTIFFStore();
+  const { raster, opacity: geoOpacity, visible: geoVisible, activeResultId } = useGeoTIFFStore();
 
   // Reset measure state when tool is deactivated
   useEffect(() => {
@@ -646,6 +720,7 @@ export default function GISMap({
         preferCanvas={true}
       >
         <MapResizer bottomPaneExpanded={bottomPaneExpanded} />
+        <ResultBoundsFitter activeResultId={activeResultId} />
         <RasterSwipeClipping swipeActive={swipeActive} swipePos={swipePos} />
 
         {layers.rgb.visible && (
@@ -653,6 +728,17 @@ export default function GISMap({
             attribution="&copy; OpenStreetMap contributors"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             opacity={layers.rgb.opacity}
+          />
+        )}
+
+        {activeResultId && geoVisible && (
+          <TileLayer
+            key={activeResultId}
+            attribution="BhuDrishti XYZ Tile Engine"
+            url={`${API_BASE_URL}/api/results/${activeResultId}/tiles/{z}/{x}/{y}.png`}
+            opacity={geoOpacity}
+            maxNativeZoom={14}
+            maxZoom={18}
           />
         )}
 
@@ -692,7 +778,7 @@ export default function GISMap({
           aoiActive={aoiActive}
           onAOIClick={handleAOIClick}
         />
-        {clicked && raster && !measureActive && !aoiActive && (
+        {clicked && (raster || activeResultId) && !measureActive && !aoiActive && (
           <ClickedMarker lat={clicked.lat} lng={clicked.lng} />
         )}
         {measureActive && <MeasureOverlay points={measurePoints} isFinished={isMeasureFinished} />}
