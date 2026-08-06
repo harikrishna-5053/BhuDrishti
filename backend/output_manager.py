@@ -172,9 +172,9 @@ def find_existing_output(
                 continue
 
             full_path = os.path.join(root, f)
-
-            if not satellite_matches(satellite, full_path):
-                continue
+            if processing_type != "composite":
+                if not satellite_matches(satellite, full_path):
+                    continue
 
             f_upper = f.upper()
             path_upper = full_path.upper()

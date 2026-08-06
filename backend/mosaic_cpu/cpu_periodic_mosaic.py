@@ -1,5 +1,6 @@
 import os
 import re
+from processing_tracker import validate_output_tiff
 from datetime import datetime
 
 from mosaic_cpu.mosaic_cpu import MosaicCPU

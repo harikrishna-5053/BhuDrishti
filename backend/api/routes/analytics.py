@@ -476,9 +476,10 @@ def get_aoi_timeseries_analytics(req: AOITimeSeriesRequest):
             
             f_upper = f.upper()
             sat_name = get_satellite_name(f)
-            
-            if sat_req != "ALL" and sat_req not in sat_name.replace("-", "") and sat_req not in f_upper:
-                continue
+            if "MOSAIC" not in f_upper:
+                if sat_req != "ALL" and sat_req not in sat_name.replace("-", "") and sat_req not in f_upper:
+                    continue
+
             
             if type_req == "daywise" and "MOSAIC" in f_upper:
                 continue
