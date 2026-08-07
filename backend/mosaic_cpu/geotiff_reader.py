@@ -5,8 +5,7 @@ except ImportError:
         import gdal
         import osr
     except ImportError:
-        gdal = None
-        osr = None
+        from gdal_compat import gdal, osr
 try:
     import numpy as np
 except ImportError:

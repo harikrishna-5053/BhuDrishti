@@ -4,7 +4,7 @@ except ImportError:
     try:
         import gdal
     except ImportError:
-        gdal = None
+        from gdal_compat import gdal
 try:
     import numpy as np
 except ImportError:

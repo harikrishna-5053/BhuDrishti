@@ -11,7 +11,7 @@ except ImportError:
     try:
         import gdal
     except ImportError:
-        gdal = None
+        from gdal_compat import gdal
 if gdal and hasattr(gdal, "SetCacheMax"):
     gdal.SetCacheMax(4096)
 

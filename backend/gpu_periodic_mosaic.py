@@ -4,11 +4,16 @@ import calendar
 from collections import defaultdict
 from datetime import datetime
 
-from osgeo import gdal
-import numpy as np
-import cupy as cp
+try:
+    from osgeo import gdal
+except ImportError:
+    try:
+        import gdal
+    except ImportError:
+        from gdal_compat import gdal
 
-gdal.UseExceptions()
+if gdal and hasattr(gdal, "UseExceptions"):
+    gdal.UseExceptions()
 
 def create_10day_mosaic(tif_list, output_file):
 

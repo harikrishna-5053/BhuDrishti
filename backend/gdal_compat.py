@@ -171,19 +171,44 @@ if not HAS_NATIVE_GDAL:
             return RasterioDriverAdapter()
 
         @staticmethod
-        def Warp(dest_name, src_ds, format="MEM", dstSRS=None, outputBounds=None, width=None, height=None, resampleAlg="near"):
+        def WarpOptions(**kwargs):
+            return kwargs
+
+        @staticmethod
+        def Warp(dest_name, src_ds, options=None, **kwargs):
             try:
+                merged = {**(options if isinstance(options, dict) else {}), **kwargs}
+                dstSRS = merged.get("dstSRS", "EPSG:4326")
+                outputBounds = merged.get("outputBounds")
+                width = merged.get("width")
+                height = merged.get("height")
+                res = merged.get("xRes", 0.0001)
+
+                if isinstance(src_ds, str):
+                    src_ds = RasterioDatasetAdapter(src_ds, mode="r")
+
                 src_arr = src_ds.ds.read(1)
                 src_crs = src_ds.ds.crs
                 src_tf = src_ds.ds.transform
 
-                if outputBounds:
-                    minx, miny, maxx, maxy = outputBounds
-                    dst_tf = rasterio.transform.from_bounds(minx, miny, maxx, maxy, width, height)
-                else:
-                    dst_tf = src_tf
-
                 dst_crs = rasterio.crs.CRS.from_string(dstSRS) if dstSRS else src_crs
+
+                if width is None or height is None:
+                    if outputBounds:
+                        minx, miny, maxx, maxy = outputBounds
+                        width = max(1, int(round((maxx - minx) / res)))
+                        height = max(1, int(round((maxy - miny) / res)))
+                        dst_tf = rasterio.transform.from_bounds(minx, miny, maxx, maxy, width, height)
+                    else:
+                        dst_tf, width, height = rasterio.warp.calculate_default_transform(
+                            src_crs, dst_crs, src_ds.ds.width, src_ds.ds.height, *src_ds.ds.bounds, resolution=res
+                        )
+                else:
+                    if outputBounds:
+                        minx, miny, maxx, maxy = outputBounds
+                        dst_tf = rasterio.transform.from_bounds(minx, miny, maxx, maxy, width, height)
+                    else:
+                        dst_tf = src_tf
 
                 dst_arr = np.zeros((height, width), dtype=src_arr.dtype)
                 reproject(
@@ -212,4 +237,37 @@ if not HAS_NATIVE_GDAL:
                 print(f"GDAL Warp Adapter Error: {e}")
                 return None
 
+    class SpatialReferenceAdapter:
+        def __init__(self, epsg=4326):
+            self.epsg = epsg
+            self.wkt = "EPSG:4326"
+
+        def ImportFromEPSG(self, code):
+            self.epsg = code
+            self.wkt = f"EPSG:{code}"
+
+        def ImportFromWkt(self, wkt):
+            self.wkt = wkt
+
+        def SetAxisMappingStrategy(self, strategy):
+            pass
+
+        def ExportToWkt(self):
+            return self.wkt
+
+        def IsSame(self, other):
+            return True
+
+        def GetAuthorityCode(self, target):
+            return str(self.epsg) if hasattr(self, "epsg") else "4326"
+
+    class OSRModuleAdapter:
+        OAMS_TRADITIONAL_GIS_ORDER = 0
+        SpatialReference = SpatialReferenceAdapter
+
+    class OGRModuleAdapter:
+        pass
+
     gdal = GDALModuleAdapter()
+    osr = OSRModuleAdapter()
+    ogr = OGRModuleAdapter()
